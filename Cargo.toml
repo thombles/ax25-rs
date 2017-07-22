@@ -1,0 +1,6 @@
+[package]
+name = "ax25"
+version = "0.1.0"
+authors = ["Thomas Karpiniec <tk@1.21jiggawatts.net>"]
+
+[dependencies]
