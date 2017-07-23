@@ -2,127 +2,6 @@ use std::error::Error;
 use std::str::FromStr;
 use std::fmt;
 
-fn parse_err<T>(msg: &str) -> Result<T,Box<Error>> {
-    Err(Box::new(ParseError { msg: msg.to_string() }))
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Address {
-    callsign: String,
-    ssid: u8,
-    c_bit: bool
-}
-
-impl Default for Address {
-    fn default() -> Address {
-        Address { callsign: "NOCALL".to_string(), ssid: 0, c_bit: false }
-    }
-}
-
-impl fmt::Display for Address {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ssid_str = match self.ssid {
-            0 => "".to_string(),
-            ssid => format!("-{}", ssid)
-        };
-        write!(f, "{}{}", self.callsign, ssid_str)
-    }
-}
-
-impl FromStr for Address {
-    type Err = Box<Error>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split("-").collect();
-        if parts.len() != 2 {
-            return parse_err("Address must be of the form CALL-#");
-        }
-
-        let callsign = parts[0].to_uppercase();
-        if callsign.len() == 0 || callsign.len() > 6 {
-            return parse_err("Callsign must be 1-6 letters/numbers");
-        }
-        for c in callsign.chars() {
-            if !c.is_alphanumeric() {
-                return parse_err("Callsign must be alphanumeric only (space padding is handled internally)");
-            }
-        }
-        
-        let ssid = parts[1].parse::<u8>()?;
-        if ssid > 15 {
-            return parse_err("SSID must be from 0 to 15");
-        }
-
-        // c_bit will be set on transmit
-        Ok(Address { callsign: callsign, ssid: ssid, c_bit: false })
-    }
-}
-
-#[derive(Debug)]
-pub struct RouteEntry {
-    repeater: Address,
-    has_repeated: bool
-}
-
-#[derive(Debug)]
-pub struct Ax25Frame {
-    source: Address,
-    destination: Address,
-    /// The route the packet has taken/will take according to repeater entries in the address field
-    route: Vec<RouteEntry>,
-    /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
-    /// or a response, as part of the address field.
-    command_or_response: Option<CommandResponse>,
-    content: FrameContent
-}
-
-impl Ax25Frame {
-    /// Returns a UTF-8 string that is a "best effort" at displaying the information
-    /// content of this frame. Returns None if there is no information field present.
-    /// Most applications will need to work with the Vec<u8> info directly.
-    pub fn info_string_lossy(&self) -> Option<String> {
-        match self.content {
-            FrameContent::Information { ref info, .. }
-                => Some(String::from_utf8_lossy(&info).into_owned()),
-            FrameContent::UnnumberedInformation { ref info, .. }
-                => Some(String::from_utf8_lossy(&info).into_owned()),
-            _ => None
-        }
-    }
-}
-
-impl fmt::Display for Ax25Frame {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let info_display = match self.info_string_lossy() {
-            Some(ref info) => info.clone(),
-            None => "-".to_string()
-        };
-        write!(f, "Source\t\t{}\nDestination\t{}\n\
-            Data\t\t\"{}\"",
-            self.source, self.destination, info_display)
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct ParseError {
-    msg: String
-}
-impl ParseError {
-    fn new() -> ParseError {
-        ParseError { msg: "Parse error".to_string() }
-    }
-}
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-impl Error for ParseError {
-    fn description(&self) -> &str {
-        return &self.msg;
-    }
-}
-
 // Mostly from AX.25 2.2 spec which has far more examples than 2.0
 #[derive(Debug, PartialEq)]
 pub enum ProtocolIdentifier {
@@ -215,6 +94,173 @@ pub enum FrameContent {
         pid: ProtocolIdentifier,
         info: Vec<u8>,
         poll_or_final: bool
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ParseError {
+    msg: String
+}
+impl ParseError {
+    fn new() -> ParseError {
+        ParseError { msg: "Parse error".to_string() }
+    }
+}
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+impl Error for ParseError {
+    fn description(&self) -> &str {
+        return &self.msg;
+    }
+}
+
+fn parse_err<T>(msg: &str) -> Result<T,Box<Error>> {
+    Err(Box::new(ParseError { msg: msg.to_string() }))
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Address {
+    callsign: String,
+    ssid: u8,
+    c_bit: bool
+}
+
+impl Default for Address {
+    fn default() -> Address {
+        Address { callsign: "NOCALL".to_string(), ssid: 0, c_bit: false }
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let ssid_str = match self.ssid {
+            0 => "".to_string(),
+            ssid => format!("-{}", ssid)
+        };
+        write!(f, "{}{}", self.callsign, ssid_str)
+    }
+}
+
+impl FromStr for Address {
+    type Err = Box<Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split("-").collect();
+        if parts.len() != 2 {
+            return parse_err("Address must be of the form CALL-#");
+        }
+
+        let callsign = parts[0].to_uppercase();
+        if callsign.len() == 0 || callsign.len() > 6 {
+            return parse_err("Callsign must be 1-6 letters/numbers");
+        }
+        for c in callsign.chars() {
+            if !c.is_alphanumeric() {
+                return parse_err("Callsign must be alphanumeric only (space padding is handled internally)");
+            }
+        }
+        
+        let ssid = parts[1].parse::<u8>()?;
+        if ssid > 15 {
+            return parse_err("SSID must be from 0 to 15");
+        }
+
+        // c_bit will be set on transmit
+        Ok(Address { callsign: callsign, ssid: ssid, c_bit: false })
+    }
+}
+
+#[derive(Debug)]
+pub struct RouteEntry {
+    repeater: Address,
+    has_repeated: bool
+}
+
+#[derive(Debug)]
+pub struct Ax25Frame {
+    source: Address,
+    destination: Address,
+    /// The route the packet has taken/will take according to repeater entries in the address field
+    route: Vec<RouteEntry>,
+    /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
+    /// or a response, as part of the address field.
+    command_or_response: Option<CommandResponse>,
+    content: FrameContent
+}
+
+impl Ax25Frame {
+    /// Returns a UTF-8 string that is a "best effort" at displaying the information
+    /// content of this frame. Returns None if there is no information field present.
+    /// Most applications will need to work with the Vec<u8> info directly.
+    pub fn info_string_lossy(&self) -> Option<String> {
+        match self.content {
+            FrameContent::Information { ref info, .. }
+                => Some(String::from_utf8_lossy(&info).into_owned()),
+            FrameContent::UnnumberedInformation { ref info, .. }
+                => Some(String::from_utf8_lossy(&info).into_owned()),
+            _ => None
+        }
+    }
+
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
+        // Skip over leading null bytes
+        let addr_start = bytes.iter().position(|&c| c != 0).ok_or(ParseError::new())?;
+        let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or(ParseError::new())?;
+        let control = addr_end + 1;
+        if addr_end - addr_start + 1 < 14 { // +1 because the "terminator" is actually within the last byte
+            return parse_err(&format!("Address field too short: {} {}", addr_start, addr_end));
+        }
+        if control >= bytes.len() {
+            return parse_err(&format!("Packet is unreasonably short: {} bytes", bytes.len() ));
+        }
+        
+        let dest = parse_address(&bytes[addr_start..addr_start+7])?;
+        let src = parse_address(&bytes[addr_start+7..addr_start+14])?;
+        let rpt_count = (addr_end + 1 - addr_start - 14) / 7;
+        let mut route: Vec<RouteEntry> = Vec::new();
+        for i in 0..rpt_count {
+            let repeater = parse_address(&bytes[addr_start + 14 + i * 7 .. addr_start + 14 + (i+1) * 7])?;
+            let entry = RouteEntry {
+                has_repeated: repeater.c_bit, // The "C" bit in an address happens to be the repeated bit for a repeater
+                repeater: repeater,
+            };
+            route.push(entry);
+        }
+
+        let content = parse_content(&bytes[control..])?;
+        let command_or_response = match (dest.c_bit, src.c_bit) {
+            (true, false) => Some(CommandResponse::Command),
+            (false, true) => Some(CommandResponse::Response),
+            _ => None
+        };
+
+        Ok(Ax25Frame {
+            source: src,
+            destination: dest,
+            route: route,
+            content: content,
+            command_or_response: command_or_response
+        })
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        // TODO
+        Vec::new()
+    }
+}
+
+impl fmt::Display for Ax25Frame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let info_display = match self.info_string_lossy() {
+            Some(ref info) => info.clone(),
+            None => "-".to_string()
+        };
+        write!(f, "Source\t\t{}\nDestination\t{}\n\
+            Data\t\t\"{}\"",
+            self.source, self.destination, info_display)
     }
 }
 
@@ -358,46 +404,6 @@ fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }
 }
 
-pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
-    // Skip over leading null bytes
-    let addr_start = bytes.iter().position(|&c| c != 0).ok_or(ParseError::new())?;
-    let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or(ParseError::new())?;
-    let control = addr_end + 1;
-    if addr_end - addr_start + 1 < 14 { // +1 because the "terminator" is actually within the last byte
-        return parse_err(&format!("Address field too short: {} {}", addr_start, addr_end));
-    }
-    if control >= bytes.len() {
-        return parse_err(&format!("Packet is unreasonably short: {} bytes", bytes.len() ));
-    }
-    
-    let dest = parse_address(&bytes[addr_start..addr_start+7])?;
-    let src = parse_address(&bytes[addr_start+7..addr_start+14])?;
-    let rpt_count = (addr_end + 1 - addr_start - 14) / 7;
-    let mut route: Vec<RouteEntry> = Vec::new();
-    for i in 0..rpt_count {
-        let repeater = parse_address(&bytes[addr_start + 14 + i * 7 .. addr_start + 14 + (i+1) * 7])?;
-        let entry = RouteEntry {
-            has_repeated: repeater.c_bit, // The "C" bit in an address happens to be the repeated bit for a repeater
-            repeater: repeater,
-        };
-        route.push(entry);
-    }
-
-    let content = parse_content(&bytes[control..])?;
-    let command_or_response = match (dest.c_bit, src.c_bit) {
-        (true, false) => Some(CommandResponse::Command),
-        (false, true) => Some(CommandResponse::Response),
-        _ => None
-    };
-
-    Ok(Ax25Frame {
-        source: src,
-        destination: dest,
-        route: route,
-        content: content,
-        command_or_response: command_or_response
-    })
-}
 
 #[test]
 fn pid_test() {

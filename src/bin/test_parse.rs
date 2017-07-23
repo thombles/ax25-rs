@@ -1,6 +1,6 @@
 extern crate ax25;
 
-use ax25::frame::parse_from_raw;
+use ax25::frame::Ax25Frame;
 use std::fs::{File, read_dir};
 use std::io::Read;
 
@@ -18,7 +18,7 @@ fn main() {
         let _ = file.read_to_end(&mut frame_data);
 
         println!("\nParse result for {}:", filename);
-        match parse_from_raw(frame_data) {
+        match Ax25Frame::from_bytes(frame_data) {
             Ok(parsed) => {
                 println!("{:#?}", parsed);
                 if let Some(info) = parsed.info_string_lossy() {
