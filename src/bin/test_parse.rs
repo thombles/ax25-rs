@@ -1,19 +1,31 @@
 extern crate ax25;
 
 use ax25::frame::parse_from_raw;
+use std::fs::{File, read_dir};
+use std::io::Read;
+
 
 fn main() {
-    let packet: Vec<u8> = vec![0x00, 0x92, 0x88, 0x40, 0x40, 0x40, 0x40, 0xE0, 0xAC, 0x96, 0x6E, 0x90, 0x88, 0x9A, 0x6D, 0x03, 0xF0, 0x56, 0x4B, 0x37, 0x48, 0x44, 0x4D, 0x2D, 0x36, 0x20, 0x50, 0x61, 0x63, 0x6B, 0x65, 0x74, 0x20, 0x49, 0x6E, 0x74, 0x65, 0x72, 0x6E, 0x65, 0x74, 0x20, 0x47, 0x61, 0x74, 0x65, 0x77, 0x61, 0x79, 0x20, 0x51, 0x45, 0x33, 0x37, 0x50, 0x47];
+    let mut paths: Vec<_> = read_dir("testdata/linux-ax0").unwrap()
+                                              .map(|r| r.unwrap())
+                                              .collect();
+    paths.sort_by_key(|dir| dir.path());
+    for entry in paths {
+        let entry_path = entry.path();
+        let filename = entry_path.to_str().unwrap();
+        let mut file = File::open(filename).unwrap();
+        let mut frame_data: Vec<u8> = Vec::new();
+        let _ = file.read_to_end(&mut frame_data);
 
-    println!("Parse result:");
-    match parse_from_raw(packet) {
-        Ok(parsed) => {
-            println!("{:#?}", parsed);
-            if let Some(info) = parsed.info_string_lossy() {
-                println!("String content: {}", info);
-            }
-        },
-        Err(e) => println!("Could not parse! {}", e)
-    };
-    
+        println!("\nParse result for {}:", filename);
+        match parse_from_raw(frame_data) {
+            Ok(parsed) => {
+                println!("{:?}", parsed);
+                if let Some(info) = parsed.info_string_lossy() {
+                    println!("String content: {}", info);
+                }
+            },
+            Err(e) => println!("Could not parse! {}", e)
+        };
+    }
 }

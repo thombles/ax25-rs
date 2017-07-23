@@ -25,9 +25,17 @@ impl fmt::Display for Address {
 }
 
 #[derive(Debug)]
+pub struct RouteEntry {
+    repeater: Address,
+    has_repeated: bool
+}
+
+#[derive(Debug)]
 pub struct Ax25Frame {
     source: Address,
     destination: Address,
+    /// The route the packet has taken/will take according to repeater entries in the address field
+    route: Vec<RouteEntry>,
     /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
     /// or a response, as part of the address field.
     command_or_response: Option<CommandResponse>,
@@ -340,6 +348,7 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
     Ok(Ax25Frame {
         source: src,
         destination: dest,
+        route: Vec::new(),
         content: content,
         command_or_response: command_or_response
     })
