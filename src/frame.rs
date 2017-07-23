@@ -23,6 +23,51 @@ pub enum ProtocolIdentifier {
     Unknown(u8)
 }
 
+impl ProtocolIdentifier {
+    fn from_byte(byte: &u8) -> ProtocolIdentifier {
+        match *byte {
+            pid if pid & 0b00110000 == 0b00010000
+                || pid & 0b00110000 == 0b00100000 => ProtocolIdentifier::Layer3Impl,
+            0x01 => ProtocolIdentifier::X25Plp,
+            0x06 => ProtocolIdentifier::CompressedTcpIp,
+            0x07 => ProtocolIdentifier::UncompressedTcpIp,
+            0x08 => ProtocolIdentifier::SegmentationFragment,
+            0xC3 => ProtocolIdentifier::TexnetDatagram,
+            0xC4 => ProtocolIdentifier::LinkQuality,
+            0xCA => ProtocolIdentifier::Appletalk,
+            0xCB => ProtocolIdentifier::AppletalkArp,
+            0xCC => ProtocolIdentifier::ArpaIp,
+            0xCD => ProtocolIdentifier::ArpaAddress,
+            0xCE => ProtocolIdentifier::Flexnet,
+            0xCF => ProtocolIdentifier::NetRom,
+            0xF0 => ProtocolIdentifier::None,
+            0xFF => ProtocolIdentifier::Escape,
+            pid => ProtocolIdentifier::Unknown(pid)
+        }
+    }
+
+    fn to_byte(&self) -> u8 {
+        match self {
+            &ProtocolIdentifier::Layer3Impl => 0b00010000,
+            &ProtocolIdentifier::X25Plp => 0x01,
+            &ProtocolIdentifier::CompressedTcpIp => 0x06,
+            &ProtocolIdentifier::UncompressedTcpIp => 0x07,
+            &ProtocolIdentifier::SegmentationFragment => 0x08,
+            &ProtocolIdentifier::TexnetDatagram => 0xC3,
+            &ProtocolIdentifier::LinkQuality => 0xC4,
+            &ProtocolIdentifier::Appletalk => 0xCA,
+            &ProtocolIdentifier::AppletalkArp => 0xCB,
+            &ProtocolIdentifier::ArpaIp => 0xCC,
+            &ProtocolIdentifier::ArpaAddress => 0xCD,
+            &ProtocolIdentifier::Flexnet => 0xCE,
+            &ProtocolIdentifier::NetRom => 0xCF,
+            &ProtocolIdentifier::None => 0xF0,
+            &ProtocolIdentifier::Escape => 0xFF,
+            &ProtocolIdentifier::Unknown(pid) => pid
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum CommandResponse {
     Command,
@@ -97,6 +142,89 @@ pub enum FrameContent {
     }
 }
 
+impl FrameContent {
+    fn encode(&self) -> Vec<u8> {
+        let mut encoded = Vec::new();
+
+        match self {
+            &FrameContent::Information { ref pid, ref info, ref receive_sequence, ref send_sequence, ref poll } => {
+                let mut c: u8 = 0;
+                c |= (receive_sequence & 0b0000_0111) << 5;
+                c |= if *poll { 1 << 4 } else { 0 };
+                c |= (send_sequence & 0b0000_0111) << 1;
+                encoded.push(c);
+                encoded.push(pid.to_byte());
+                encoded.extend(info);
+            },
+            &FrameContent::ReceiveReady { ref receive_sequence, ref poll_or_final } => {
+                let mut c: u8 = 0b0000_0001;
+                c |= if *poll_or_final { 1 << 4 } else { 0 };
+                c |= (receive_sequence & 0b0000_0111) << 5;
+                encoded.push(c);
+            },
+            &FrameContent::ReceiveNotReady { ref receive_sequence, ref poll_or_final } => {
+                let mut c: u8 = 0b0000_0101;
+                c |= if *poll_or_final { 1 << 4 } else { 0 };
+                c |= (receive_sequence & 0b0000_0111) << 5;
+                encoded.push(c);
+            },
+            &FrameContent::Reject { ref receive_sequence, ref poll_or_final } => {
+                let mut c: u8 = 0b0000_1001;
+                c |= if *poll_or_final { 1 << 4 } else { 0 };
+                c |= (receive_sequence & 0b0000_0111) << 5;
+                encoded.push(c);
+            },
+            &FrameContent::SetAsynchronousBalancedMode { ref poll } => {
+                let mut c: u8 = 0b0010_1111;
+                c |= if *poll { 1 << 4 } else { 0 };
+                encoded.push(c);
+            },
+            &FrameContent::Disconnect { ref poll } => {
+                let mut c: u8 = 0b0100_0011;
+                c |= if *poll { 1 << 4 } else { 0 };
+                encoded.push(c);
+            },
+            &FrameContent::DisconnectedMode { ref final_bit } => {
+                let mut c: u8 = 0b0000_1111;
+                c |= if *final_bit { 1 << 4 } else { 0 };
+                encoded.push(c);
+            },
+            &FrameContent::UnnumberedAcknowledge { ref final_bit } => {
+                let mut c: u8 = 0b0110_0011;
+                c |= if *final_bit { 1 << 4 } else { 0 };
+                encoded.push(c);
+            },
+            &FrameContent::FrameReject { ref final_bit, ref rejected_control_field_raw, ref z, ref y, ref x, ref w,
+                    ref receive_sequence, ref send_sequence, ref command_response } => {
+                let mut c: u8 = 0b1000_0111;
+                c |= if *final_bit { 1 << 4 } else { 0 };
+                encoded.push(c);
+                let mut frmr1: u8 = 0;
+                frmr1 |= if *z { 1 << 3 } else { 0 };
+                frmr1 |= if *y { 1 << 2 } else { 0 };
+                frmr1 |= if *x { 1 << 1 } else { 0 };
+                frmr1 |= if *w { 1 << 0 } else { 0 };
+                encoded.push(frmr1);
+                let mut frmr2: u8 = 0;
+                frmr2 |= (receive_sequence & 0b0000_0111) << 5;
+                frmr2 |= if *command_response == CommandResponse::Response { 1 << 4 } else { 0 };
+                frmr2 |= (send_sequence & 0b0000_0111) << 1;
+                encoded.push(frmr2);
+                encoded.push(*rejected_control_field_raw);
+            },
+            &FrameContent::UnnumberedInformation { ref pid, ref info, ref poll_or_final } => {
+                let mut c: u8 = 0b0000_0011;
+                c |= if *poll_or_final { 1 << 4 } else { 0 };
+                encoded.push(c);
+                encoded.push(pid.to_byte());
+                encoded.extend(info);
+            }
+        }
+
+        encoded
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct ParseError {
     msg: String
@@ -129,7 +257,7 @@ pub struct Address {
 }
 
 impl Address {
-    fn encode(&self, high_bit: bool, final_in_address: bool) -> Vec<u8> {
+    fn to_bytes(&self, high_bit: bool, final_in_address: bool) -> Vec<u8> {
         let mut encoded = Vec::new();
         // Shift by one bit as required for AX.25 address encoding
         for b in self.callsign.as_bytes() {
@@ -274,13 +402,14 @@ impl Ax25Frame {
             Some(CommandResponse::Response) => (false, true),
             _ => (true, false) // assume Command
         };
-        frame.extend(self.destination.encode(dest_c_bit, false));
-        frame.extend(self.source.encode(src_c_bit, self.route.is_empty()));
+        frame.extend(self.destination.to_bytes(dest_c_bit, false));
+        frame.extend(self.source.to_bytes(src_c_bit, self.route.is_empty()));
 
         for (i, entry) in self.route.iter().enumerate() {
-            frame.extend(entry.repeater.encode(entry.has_repeated, i+1 == self.route.len()));
+            frame.extend(entry.repeater.to_bytes(entry.has_repeated, i+1 == self.route.len()));
         }
 
+        frame.extend(self.content.encode());
         frame
     }
 }
@@ -311,28 +440,6 @@ fn parse_address(bytes: &[u8]) -> Result<Address, Box<Error>> {
     })
 }
 
-fn get_pid_from_byte(byte: &u8) -> ProtocolIdentifier {
-    match *byte {
-        pid if pid & 0b00110000 == 0b00010000
-            || pid & 0b00110000 == 0b00100000 => ProtocolIdentifier::Layer3Impl,
-        0x01 => ProtocolIdentifier::X25Plp,
-        0x06 => ProtocolIdentifier::CompressedTcpIp,
-        0x07 => ProtocolIdentifier::UncompressedTcpIp,
-        0x08 => ProtocolIdentifier::SegmentationFragment,
-        0xC3 => ProtocolIdentifier::TexnetDatagram,
-        0xC4 => ProtocolIdentifier::LinkQuality,
-        0xCA => ProtocolIdentifier::Appletalk,
-        0xCB => ProtocolIdentifier::AppletalkArp,
-        0xCC => ProtocolIdentifier::ArpaIp,
-        0xCD => ProtocolIdentifier::ArpaAddress,
-        0xCE => ProtocolIdentifier::Flexnet,
-        0xCF => ProtocolIdentifier::NetRom,
-        0xF0 => ProtocolIdentifier::None,
-        0xFF => ProtocolIdentifier::Escape,
-        pid => ProtocolIdentifier::Unknown(pid)
-    }
-}
-
 fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     if bytes.len() < 2 {
         return parse_err("Missing PID field");
@@ -342,7 +449,7 @@ fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         receive_sequence: c & 0b1110_0000 >> 5,
         send_sequence: c & 0b0000_1110 >> 1,
         poll: c & 0b0001_0000 > 0,
-        pid: get_pid_from_byte(&bytes[1]),
+        pid: ProtocolIdentifier::from_byte(&bytes[1]),
         info: bytes[2..].iter().cloned().collect() // could be empty vec
     })
 }
@@ -398,7 +505,7 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation {
         poll_or_final: bytes[0] & 0b0001_0000 > 0,
-        pid: get_pid_from_byte(&bytes[1]),
+        pid: ProtocolIdentifier::from_byte(&bytes[1]),
         info: bytes[2..].iter().cloned().collect()
     })
 }
