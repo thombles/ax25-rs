@@ -24,6 +24,11 @@ fn main() {
                 if let Some(info) = parsed.info_string_lossy() {
                     println!("String content: {}", info);
                 }
+                print!("\nReencoded: ");
+                for byte in parsed.to_bytes() {
+                   print!("{:X} ", byte);
+                }
+                println!("\n");
             },
             Err(e) => println!("Could not parse! {}", e)
         };

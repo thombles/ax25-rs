@@ -128,6 +128,27 @@ pub struct Address {
     c_bit: bool
 }
 
+impl Address {
+    fn encode(&self, high_bit: bool, final_in_address: bool) -> Vec<u8> {
+        let mut encoded = Vec::new();
+        // Shift by one bit as required for AX.25 address encoding
+        for b in self.callsign.as_bytes() {
+            encoded.push(b << 1);
+        }
+        // Pad with spaces up to length 6
+        while encoded.len() != 6 {
+            encoded.push(b' ' << 1);
+        }
+        // Now do the SSID byte
+        let high = if high_bit { 0b1000_0000 } else { 0 };
+        let low = if final_in_address { 0b0000_0001 } else { 0 };
+        let ssid_byte = (self.ssid << 1) | 0b0110_0000 | high | low; 
+        encoded.push(ssid_byte);
+
+        encoded
+    }
+}
+
 impl Default for Address {
     fn default() -> Address {
         Address { callsign: "NOCALL".to_string(), ssid: 0, c_bit: false }
@@ -247,8 +268,20 @@ impl Ax25Frame {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        // TODO
-        Vec::new()
+        let mut frame = Vec::new();
+        let (dest_c_bit, src_c_bit) = match self.command_or_response {
+            Some(CommandResponse::Command) => (true, false),
+            Some(CommandResponse::Response) => (false, true),
+            _ => (true, false) // assume Command
+        };
+        frame.extend(self.destination.encode(dest_c_bit, false));
+        frame.extend(self.source.encode(src_c_bit, self.route.is_empty()));
+
+        for (i, entry) in self.route.iter().enumerate() {
+            frame.extend(entry.repeater.encode(entry.has_repeated, i+1 == self.route.len()));
+        }
+
+        frame
     }
 }
 
