@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 #[derive(Debug)]
-struct Address {
+pub struct Address {
     callsign: String,
     ssid: u8
 }
@@ -15,7 +15,11 @@ impl Default for Address {
 
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}-{}", self.callsign, self.ssid)
+        let ssid_str = match self.ssid {
+            0 => "".to_string(),
+            ssid => format!("-{}", ssid)
+        };
+        write!(f, "{}{}", self.callsign, ssid_str)
     }
 }
 
@@ -23,6 +27,7 @@ impl fmt::Display for Address {
 pub struct Ax25Frame {
     source: Address,
     destination: Address,
+    pid: Option<ProtocolIdentifier>,
     info: Option<Vec<u8>>,
     info_str: Option<String>
 }
@@ -31,9 +36,17 @@ impl fmt::Display for Ax25Frame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let info_display = match &self.info_str {
             &Some(ref info) => info.clone(),
-            &None => "".to_string()
+            &None => "-".to_string()
         };
-        write!(f, "Source\t\t{}\nDestination\t{}\nData\t\t\"{}\"", self.source, self.destination, info_display)
+        let pid_display = match &self.pid {
+            &Some(ref pid) => format!("{:?}", pid),
+            &None => "-".to_string()
+        };
+        write!(f, "Source\t\t{}\nDestination\t{}\n\
+            Protocol\t{}\n\
+            Data\t\t\"{}\"",
+            self.source, self.destination,
+            pid_display, info_display)
     }
 }
 
@@ -57,6 +70,27 @@ impl Error for ParseError {
     }
 }
 
+// Mostly from AX.25 2.2 spec which has far more examples than 2.0
+#[derive(Debug, PartialEq)]
+pub enum ProtocolIdentifier {
+    Layer3Impl,
+    X25Plp,
+    CompressedTcpIp,
+    UncompressedTcpIp,
+    SegmentationFragment,
+    TexnetDatagram,
+    LinkQuality,
+    Appletalk,
+    AppletalkArp,
+    ArpaIp,
+    ArpaAddress,
+    Flexnet,
+    NetRom,
+    None,
+    Escape,
+    Unknown(u8)
+}
+
 fn parse_address(bytes: &[u8], address: &mut Address) -> Result<(), Box<Error>> {
     let mut dest_utf8: Vec<u8> = bytes[0..6].iter()
         .rev()
@@ -67,6 +101,28 @@ fn parse_address(bytes: &[u8], address: &mut Address) -> Result<(), Box<Error>> 
     address.callsign = String::from_utf8(dest_utf8)?;
     address.ssid = (bytes[6] >> 1) & 0x0f;
     Ok(())
+}
+
+fn get_pid_from_byte(byte: &u8) -> ProtocolIdentifier {
+    match *byte {
+        pid if pid & 0b00110000 == 0b00010000
+            || pid & 0b00110000 == 0b00100000 => ProtocolIdentifier::Layer3Impl,
+        0x01 => ProtocolIdentifier::X25Plp,
+        0x06 => ProtocolIdentifier::CompressedTcpIp,
+        0x07 => ProtocolIdentifier::UncompressedTcpIp,
+        0x08 => ProtocolIdentifier::SegmentationFragment,
+        0xC3 => ProtocolIdentifier::TexnetDatagram,
+        0xC4 => ProtocolIdentifier::LinkQuality,
+        0xCA => ProtocolIdentifier::Appletalk,
+        0xCB => ProtocolIdentifier::AppletalkArp,
+        0xCC => ProtocolIdentifier::ArpaIp,
+        0xCD => ProtocolIdentifier::ArpaAddress,
+        0xCE => ProtocolIdentifier::Flexnet,
+        0xCF => ProtocolIdentifier::NetRom,
+        0xF0 => ProtocolIdentifier::None,
+        0xFF => ProtocolIdentifier::Escape,
+        pid => ProtocolIdentifier::Unknown(pid)
+    }
 }
 
 pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
@@ -92,6 +148,9 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
         return Ok(frame);
     }
 
+    // PID is only ever 1 bit
+    frame.pid = Some(get_pid_from_byte(&bytes[pid]));
+
     // Now extract the information content as a copy
     frame.info = Some(bytes[info_start..].iter().cloned().collect());
     // Create a best-effort string version for convenience
@@ -101,4 +160,15 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
     };
     
     Ok(frame)
+}
+
+#[test]
+fn pid_test() {
+    assert_eq!(get_pid_from_byte(&0x01), ProtocolIdentifier::X25Plp);
+    assert_eq!(get_pid_from_byte(&0xCA), ProtocolIdentifier::Appletalk);
+    assert_eq!(get_pid_from_byte(&0xFF), ProtocolIdentifier::Escape);
+    assert_eq!(get_pid_from_byte(&0x45), ProtocolIdentifier::Unknown(0x45));
+    assert_eq!(get_pid_from_byte(&0x10), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(get_pid_from_byte(&0x20), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(get_pid_from_byte(&0xA5), ProtocolIdentifier::Layer3Impl);
 }
