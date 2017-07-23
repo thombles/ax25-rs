@@ -338,6 +338,17 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
     
     let dest = parse_address(&bytes[addr_start..addr_start+7])?;
     let src = parse_address(&bytes[addr_start+7..addr_start+14])?;
+    let rpt_count = (addr_end + 1 - addr_start - 14) / 7;
+    let mut route: Vec<RouteEntry> = Vec::new();
+    for i in 0..rpt_count {
+        let repeater = parse_address(&bytes[addr_start + 14 + i * 7 .. addr_start + 14 + (i+1) * 7])?;
+        let entry = RouteEntry {
+            has_repeated: repeater.c_bit, // The "C" bit in an address happens to be the repeated bit for a repeater
+            repeater: repeater,
+        };
+        route.push(entry);
+    }
+
     let content = parse_content(&bytes[control..])?;
     let command_or_response = match (dest.c_bit, src.c_bit) {
         (true, false) => Some(CommandResponse::Command),
@@ -348,7 +359,7 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
     Ok(Ax25Frame {
         source: src,
         destination: dest,
-        route: Vec::new(),
+        route: route,
         content: content,
         command_or_response: command_or_response
     })
