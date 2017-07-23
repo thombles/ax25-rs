@@ -1,7 +1,12 @@
 use std::error::Error;
+use std::str::FromStr;
 use std::fmt;
 
-#[derive(Debug)]
+fn parse_err<T>(msg: &str) -> Result<T,Box<Error>> {
+    Err(Box::new(ParseError { msg: msg.to_string() }))
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Address {
     callsign: String,
     ssid: u8,
@@ -21,6 +26,35 @@ impl fmt::Display for Address {
             ssid => format!("-{}", ssid)
         };
         write!(f, "{}{}", self.callsign, ssid_str)
+    }
+}
+
+impl FromStr for Address {
+    type Err = Box<Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split("-").collect();
+        if parts.len() != 2 {
+            return parse_err("Address must be of the form CALL-#");
+        }
+
+        let callsign = parts[0].to_uppercase();
+        if callsign.len() == 0 || callsign.len() > 6 {
+            return parse_err("Callsign must be 1-6 letters/numbers");
+        }
+        for c in callsign.chars() {
+            if !c.is_alphanumeric() {
+                return parse_err("Callsign must be alphanumeric only (space padding is handled internally)");
+            }
+        }
+        
+        let ssid = parts[1].parse::<u8>()?;
+        if ssid > 15 {
+            return parse_err("SSID must be from 0 to 15");
+        }
+
+        // c_bit will be set on transmit
+        Ok(Address { callsign: callsign, ssid: ssid, c_bit: false })
     }
 }
 
@@ -222,7 +256,7 @@ fn get_pid_from_byte(byte: &u8) -> ProtocolIdentifier {
 
 fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     if bytes.len() < 2 {
-        return Err(Box::new(ParseError { msg: "Missing PID field".to_string() }));
+        return parse_err("Missing PID field");
     }
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information {
@@ -254,7 +288,7 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
             receive_sequence: n_r,
             poll_or_final: poll_or_final
         }),
-        _ => Err(Box::new(ParseError { msg: "Unrecognised S field type".to_string() }))
+        _ => parse_err("Unrecognised S field type")
     }
 }
 
@@ -274,13 +308,13 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         0b0110_0011 => Ok(FrameContent::UnnumberedAcknowledge { final_bit: poll_or_final }),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
-        _ => Err(Box::new(ParseError { msg: "Unrecognised U field type".to_string() }))
+        _ => parse_err("Unrecognised U field type")
     }
 }
 
 fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     if bytes.len() < 2 {
-        return Err(Box::new(ParseError { msg: "Missing PID field".to_string() }));
+        return parse_err("Missing PID field");
     }
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation {
@@ -293,7 +327,7 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
 fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
-        return Err(Box::new(ParseError { msg: "Wrong size for FRMR info".to_string() }));
+        return parse_err("Wrong size for FRMR info");
     }
     Ok(FrameContent::FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
@@ -314,13 +348,13 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
 /// Parse the content of the frame starting from the control field
 fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     if bytes.len() == 0 {
-        return Err(Box::new(ParseError { msg: "Zero content length".to_string() }));
+        return parse_err("Zero content length");
     }
     match bytes[0] {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
         c if c & 0x03 == 0x01 => parse_s_frame(bytes),
         c if c & 0x03 == 0x03 => parse_u_frame(bytes),
-        _ => Err(Box::new(ParseError { msg: "Unrecognised control field".to_string() }))
+        _ => parse_err("Unrecognised control field")
     }
 }
 
@@ -330,10 +364,10 @@ pub fn parse_from_raw(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
     let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or(ParseError::new())?;
     let control = addr_end + 1;
     if addr_end - addr_start + 1 < 14 { // +1 because the "terminator" is actually within the last byte
-        return Err(Box::new(ParseError { msg: format!("Address field too short: {} {}", addr_start, addr_end) }));
+        return parse_err(&format!("Address field too short: {} {}", addr_start, addr_end));
     }
     if control >= bytes.len() {
-        return Err(Box::new(ParseError { msg: format!("Packet is unreasonably short: {} bytes", bytes.len() )}));
+        return parse_err(&format!("Packet is unreasonably short: {} bytes", bytes.len() ));
     }
     
     let dest = parse_address(&bytes[addr_start..addr_start+7])?;
@@ -374,4 +408,18 @@ fn pid_test() {
     assert_eq!(get_pid_from_byte(&0x10), ProtocolIdentifier::Layer3Impl);
     assert_eq!(get_pid_from_byte(&0x20), ProtocolIdentifier::Layer3Impl);
     assert_eq!(get_pid_from_byte(&0xA5), ProtocolIdentifier::Layer3Impl);
+}
+
+#[test]
+fn test_address_fromstr() {
+    assert_eq!(Address::from_str("VK7NTK-1").unwrap(), Address { callsign: "VK7NTK".to_string(), ssid: 1, c_bit: false });
+    assert_eq!(Address::from_str("ID-15").unwrap(), Address { callsign: "ID".to_string(), ssid: 15, c_bit: false });
+    assert!(Address::from_str("vk7ntk-5").is_ok());
+
+    assert!(Address::from_str("-1").is_err());
+    assert!(Address::from_str("VK7NTK").is_err());
+    assert!(Address::from_str("VK7N -5").is_err());
+    assert!(Address::from_str("VK7NTK-16").is_err());
+    assert!(Address::from_str("8").is_err());
+    assert!(Address::from_str("vk7n--1").is_err());
 }

@@ -20,7 +20,7 @@ fn main() {
         println!("\nParse result for {}:", filename);
         match parse_from_raw(frame_data) {
             Ok(parsed) => {
-                println!("{:?}", parsed);
+                println!("{:#?}", parsed);
                 if let Some(info) = parsed.info_string_lossy() {
                     println!("String content: {}", info);
                 }
