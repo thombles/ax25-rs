@@ -7,7 +7,13 @@ fn main() {
 
     println!("Parse result:");
     match parse_from_raw(packet) {
-        Ok(parsed) => println!("{}", parsed),
+        Ok(parsed) => {
+            println!("{:#?}", parsed);
+            if let Some(info) = parsed.info_string_lossy() {
+                println!("String content: {}", info);
+            }
+        },
         Err(e) => println!("Could not parse! {}", e)
     };
+    
 }
