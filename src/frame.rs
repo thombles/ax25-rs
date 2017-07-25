@@ -330,14 +330,14 @@ pub struct RouteEntry {
 
 #[derive(Debug)]
 pub struct Ax25Frame {
-    source: Address,
-    destination: Address,
+    pub source: Address,
+    pub destination: Address,
     /// The route the packet has taken/will take according to repeater entries in the address field
-    route: Vec<RouteEntry>,
+    pub route: Vec<RouteEntry>,
     /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
     /// or a response, as part of the address field.
-    command_or_response: Option<CommandResponse>,
-    content: FrameContent
+    pub command_or_response: Option<CommandResponse>,
+    pub content: FrameContent
 }
 
 impl Ax25Frame {
