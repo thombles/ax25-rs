@@ -18,7 +18,7 @@ fn main() {
         let _ = file.read_to_end(&mut frame_data);
 
         println!("\nParse result for {}:", filename);
-        match Ax25Frame::from_bytes(frame_data) {
+        match Ax25Frame::from_bytes(&frame_data) {
             Ok(parsed) => {
                 println!("{:#?}", parsed);
                 if let Some(info) = parsed.info_string_lossy() {

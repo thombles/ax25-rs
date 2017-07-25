@@ -354,7 +354,7 @@ impl Ax25Frame {
         }
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Ax25Frame, Box<Error>> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<Error>> {
         // Skip over leading null bytes
         let addr_start = bytes.iter().position(|&c| c != 0).ok_or(ParseError::new())?;
         let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or(ParseError::new())?;
