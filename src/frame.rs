@@ -397,6 +397,7 @@ impl Ax25Frame {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut frame = Vec::new();
+        frame.push(0);
         let (dest_c_bit, src_c_bit) = match self.command_or_response {
             Some(CommandResponse::Command) => (true, false),
             Some(CommandResponse::Response) => (false, true),
