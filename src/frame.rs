@@ -324,8 +324,8 @@ impl FromStr for Address {
 
 #[derive(Debug)]
 pub struct RouteEntry {
-    repeater: Address,
-    has_repeated: bool
+    pub repeater: Address,
+    pub has_repeated: bool
 }
 
 #[derive(Debug)]

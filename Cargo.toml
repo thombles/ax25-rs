@@ -4,3 +4,8 @@ version = "0.1.0"
 authors = ["Thomas Karpiniec <tk@1.21jiggawatts.net>"]
 
 [dependencies]
+libc = { version = "0.2.29", optional = true }
+
+[features]
+default = ["libc"]
+linux = ["libc"]
