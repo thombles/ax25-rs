@@ -447,9 +447,9 @@ fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information {
-        receive_sequence: c & 0b1110_0000 >> 5,
-        send_sequence: c & 0b0000_1110 >> 1,
-        poll: c & 0b0001_0000 > 0,
+        receive_sequence: (c & 0b1110_0000) >> 5,
+        send_sequence: (c & 0b0000_1110) >> 1,
+        poll: (c & 0b0001_0000) > 0,
         pid: ProtocolIdentifier::from_byte(&bytes[1]),
         info: bytes[2..].iter().cloned().collect() // could be empty vec
     })
@@ -459,8 +459,8 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     // These all have the same general layout
     // There should be no PID or info following this control byte
     let c = bytes[0];
-    let n_r = c & 0b1110_0000 >> 5;
-    let poll_or_final = c & 0b0001_0000 > 0;
+    let n_r = (c & 0b1110_0000) >> 5;
+    let poll_or_final = (c & 0b0001_0000) > 0;
 
     match c & 0b0000_1111 {
         0b0000_0001 => Ok(FrameContent::ReceiveReady {
@@ -523,12 +523,12 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         y: bytes[1] & 0b0000_0100 > 0,
         x: bytes[1] & 0b0000_0010 > 0,
         w: bytes[1] & 0b0000_0001 > 0,
-        receive_sequence: bytes[2] & 0b1110_0000 >> 5,
+        receive_sequence: (bytes[2] & 0b1110_0000) >> 5,
         command_response: match bytes[2] & 0b0001_0000 > 0 {
             true => CommandResponse::Response,
             false => CommandResponse::Command
         },
-        send_sequence: bytes[2] & 0b0000_1110 >> 1
+        send_sequence: (bytes[2] & 0b0000_1110) >> 1
     })
 }
 
