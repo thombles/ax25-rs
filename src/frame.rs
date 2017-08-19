@@ -356,6 +356,8 @@ impl Ax25Frame {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<Error>> {
         // Skip over leading null bytes
+        // Linux AF_PACKET has oen of these - we will strip it out in the linux module
+        // but also keep the protection here
         let addr_start = bytes.iter().position(|&c| c != 0).ok_or(ParseError::new())?;
         let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or(ParseError::new())?;
         let control = addr_end + 1;
@@ -397,7 +399,6 @@ impl Ax25Frame {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut frame = Vec::new();
-        frame.push(0);
         let (dest_c_bit, src_c_bit) = match self.command_or_response {
             Some(CommandResponse::Command) => (true, false),
             Some(CommandResponse::Response) => (false, true),

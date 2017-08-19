@@ -57,6 +57,11 @@ impl Ax25RawSocket {
     }
 
     pub fn send_frame(&self, frame: &[u8], ifindex: i32) -> io::Result<()> {
+        // The Linux interface demands a single null byte prefix on the actual packet
+        let mut prefixed_frame: Vec<u8> = Vec::with_capacity(frame.len() + 1);
+        prefixed_frame.push(0);
+        prefixed_frame.extend(frame.iter().cloned());
+        
         let sa = sockaddr_ll {
             sll_family: AF_PACKET as u16,
             sll_protocol: ETH_P_AX25.to_be(),
@@ -69,7 +74,7 @@ impl Ax25RawSocket {
 
         match unsafe {
             let sa_ptr = mem::transmute::<*const sockaddr_ll, *const sockaddr>(&sa);
-            sendto(self.fd, frame.as_ptr() as *const c_void, frame.len(),
+            sendto(self.fd, prefixed_frame.as_ptr() as *const c_void, prefixed_frame.len(),
                 0, sa_ptr, mem::size_of_val(&sa) as socklen_t)
         } {
             -1 => Err(Error::last_os_error()),
@@ -90,7 +95,15 @@ impl Ax25RawSocket {
                 len => len as usize
             };
         }
-        Ok(buf[0..len].to_vec())
+        let ref valid_buf = buf[0..len];
+
+        // In practice AF_PACKET gives us one leading one null byte
+        // These are unhelpful so we will skip all leading null bytes
+        let filtered: Vec<u8> = valid_buf.into_iter()
+            .skip_while(|&c| *c == 0)
+            .cloned()
+            .collect();
+        Ok(filtered)
     }
 }
 
