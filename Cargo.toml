@@ -2,6 +2,11 @@
 name = "ax25"
 version = "0.1.0"
 authors = ["Thomas Karpiniec <tk@1.21jiggawatts.net>"]
+description = "Utilities for Packet Radio in Rust. AX.25 encoding/decoding and radio interfacing."
+repository = "https://github.com/thombles/ax25-rs"
+keywords = ["amateur", "radio", "packet", "ham"]
+categories = ["network-programming"]
+license = "Apache-2.0"
 
 [dependencies]
 libc = { version = "0.2.29", optional = true }
