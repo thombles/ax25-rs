@@ -74,150 +74,177 @@ pub enum CommandResponse {
     Response
 }
 
+/// Information (I) frame
+#[derive(Debug, PartialEq)]
+pub struct Information {
+    pid: ProtocolIdentifier,
+    info: Vec<u8>,
+    receive_sequence: u8,
+    send_sequence: u8,
+    poll: bool
+}
+
+/// RR Supervisory (S) frame
+#[derive(Debug, PartialEq)]
+pub struct ReceiveReady {
+    receive_sequence: u8,
+    poll_or_final: bool
+}
+
+/// RNR Supervisory (S) frame
+#[derive(Debug, PartialEq)]
+pub struct ReceiveNotReady {
+    receive_sequence: u8,
+    poll_or_final: bool
+}
+
+/// REJ Supervisory (S) frame
+#[derive(Debug, PartialEq)]
+pub struct Reject {
+    receive_sequence: u8,
+    poll_or_final: bool
+}
+
+/// SABM Unnumbered (U) frame
+#[derive(Debug, PartialEq)]
+pub struct SetAsynchronousBalancedMode {
+    poll: bool
+}
+
+/// DISC Unnumbered (U) frame
+#[derive(Debug, PartialEq)]
+pub struct Disconnect {
+    poll: bool
+}
+
+/// DM Unnumbered (U) frame
+#[derive(Debug, PartialEq)]
+pub struct DisconnectedMode {
+    final_bit: bool // 'final' is a rust keyword
+}
+
+/// UA Unnumbered (U) frame
+#[derive(Debug, PartialEq)]
+pub struct UnnumberedAcknowledge {
+    final_bit: bool
+}
+
+/// FRMR Unnumbered (U) frame. Flags correspond to names in the AX.25 specification.
+#[derive(Debug, PartialEq)]
+pub struct FrameReject {
+    final_bit: bool,
+    /// A raw copy of the control field in the frame that was rejected
+    rejected_control_field_raw: u8,
+    /// The attached control field contained an invalid Receive Sequence Number
+    z: bool,
+    /// The information field of a received frame exceeded the maximum allowable length.
+    y: bool,
+    /// A U or S frame was received that contained an information field.
+    x: bool,
+    /// The received control field was invalid or not implemented.
+    w: bool,
+    receive_sequence: u8,
+    send_sequence: u8,
+    command_response: CommandResponse
+}
+
+/// UI Unnumbered Information frame
+#[derive(Debug, PartialEq)]
+pub struct UnnumberedInformation {
+    pid: ProtocolIdentifier,
+    info: Vec<u8>,
+    poll_or_final: bool
+}
+
 #[derive(Debug, PartialEq)]
 pub enum FrameContent {
-    /// Information (I) frame
-    Information {
-        pid: ProtocolIdentifier,
-        info: Vec<u8>,
-        receive_sequence: u8,
-        send_sequence: u8,
-        poll: bool
-    },
-
-    /// RR Supervisory (S) frame
-    ReceiveReady {
-        receive_sequence: u8,
-        poll_or_final: bool
-    },
-    /// RNR Supervisory (S) frame
-    ReceiveNotReady {
-        receive_sequence: u8,
-        poll_or_final: bool
-    },
-    /// REJ Supervisory (S) frame
-    Reject {
-        receive_sequence: u8,
-        poll_or_final: bool
-    },
-
-    /// SABM Unnumbered (U) frame
-    SetAsynchronousBalancedMode {
-        poll: bool
-    },
-    /// DISC Unnumbered (U) frame
-    Disconnect {
-        poll: bool
-    },
-    /// DM Unnumbered (U) frame
-    DisconnectedMode {
-        final_bit: bool // 'final' is a rust keyword
-    },
-    /// UA Unnumbered (U) frame
-    UnnumberedAcknowledge {
-        final_bit: bool
-    },
-    /// FRMR Unnumbered (U) frame. Flags correspond to names in the AX.25 specification.
-    FrameReject {
-        final_bit: bool,
-        /// A raw copy of the control field in the frame that was rejected
-        rejected_control_field_raw: u8,
-        /// The attached control field contained an invalid Receive Sequence Number
-        z: bool,
-        /// The information field of a received frame exceeded the maximum allowable length.
-        y: bool,
-        /// A U or S frame was received that contained an information field.
-        x: bool,
-        /// The received control field was invalid or not implemented.
-        w: bool,
-        receive_sequence: u8,
-        send_sequence: u8,
-        command_response: CommandResponse
-    },
-    /// UI Unnumbered Information frame
-    UnnumberedInformation {
-        pid: ProtocolIdentifier,
-        info: Vec<u8>,
-        poll_or_final: bool
-    }
+    Information(Information),
+    ReceiveReady(ReceiveReady),
+    ReceiveNotReady(ReceiveNotReady),
+    Reject(Reject),
+    SetAsynchronousBalancedMode(SetAsynchronousBalancedMode),
+    Disconnect(Disconnect),
+    DisconnectedMode(DisconnectedMode),
+    UnnumberedAcknowledge(UnnumberedAcknowledge),
+    FrameReject(FrameReject),
+    UnnumberedInformation(UnnumberedInformation)
 }
 
 impl FrameContent {
     fn encode(&self) -> Vec<u8> {
         let mut encoded = Vec::new();
 
-        match self {
-            &FrameContent::Information { ref pid, ref info, ref receive_sequence, ref send_sequence, ref poll } => {
+        match *self {
+            FrameContent::Information(ref i) => {
                 let mut c: u8 = 0;
-                c |= (receive_sequence & 0b0000_0111) << 5;
-                c |= if *poll { 1 << 4 } else { 0 };
-                c |= (send_sequence & 0b0000_0111) << 1;
+                c |= (i.receive_sequence & 0b0000_0111) << 5;
+                c |= if i.poll { 1 << 4 } else { 0 };
+                c |= (i.send_sequence & 0b0000_0111) << 1;
                 encoded.push(c);
-                encoded.push(pid.to_byte());
-                encoded.extend(info);
+                encoded.push(i.pid.to_byte());
+                encoded.extend(&i.info);
             },
-            &FrameContent::ReceiveReady { ref receive_sequence, ref poll_or_final } => {
+            FrameContent::ReceiveReady(ref rr) => {
                 let mut c: u8 = 0b0000_0001;
-                c |= if *poll_or_final { 1 << 4 } else { 0 };
-                c |= (receive_sequence & 0b0000_0111) << 5;
+                c |= if rr.poll_or_final { 1 << 4 } else { 0 };
+                c |= (rr.receive_sequence & 0b0000_0111) << 5;
                 encoded.push(c);
             },
-            &FrameContent::ReceiveNotReady { ref receive_sequence, ref poll_or_final } => {
+            FrameContent::ReceiveNotReady(ref rnr) => {
                 let mut c: u8 = 0b0000_0101;
-                c |= if *poll_or_final { 1 << 4 } else { 0 };
-                c |= (receive_sequence & 0b0000_0111) << 5;
+                c |= if rnr.poll_or_final { 1 << 4 } else { 0 };
+                c |= (rnr.receive_sequence & 0b0000_0111) << 5;
                 encoded.push(c);
             },
-            &FrameContent::Reject { ref receive_sequence, ref poll_or_final } => {
+            FrameContent::Reject(ref rej) => {
                 let mut c: u8 = 0b0000_1001;
-                c |= if *poll_or_final { 1 << 4 } else { 0 };
-                c |= (receive_sequence & 0b0000_0111) << 5;
+                c |= if rej.poll_or_final { 1 << 4 } else { 0 };
+                c |= (rej.receive_sequence & 0b0000_0111) << 5;
                 encoded.push(c);
             },
-            &FrameContent::SetAsynchronousBalancedMode { ref poll } => {
+            FrameContent::SetAsynchronousBalancedMode(ref sabm) => {
                 let mut c: u8 = 0b0010_1111;
-                c |= if *poll { 1 << 4 } else { 0 };
+                c |= if sabm.poll { 1 << 4 } else { 0 };
                 encoded.push(c);
             },
-            &FrameContent::Disconnect { ref poll } => {
+            FrameContent::Disconnect(ref disc) => {
                 let mut c: u8 = 0b0100_0011;
-                c |= if *poll { 1 << 4 } else { 0 };
+                c |= if disc.poll { 1 << 4 } else { 0 };
                 encoded.push(c);
             },
-            &FrameContent::DisconnectedMode { ref final_bit } => {
+            FrameContent::DisconnectedMode(ref dm) => {
                 let mut c: u8 = 0b0000_1111;
-                c |= if *final_bit { 1 << 4 } else { 0 };
+                c |= if dm.final_bit { 1 << 4 } else { 0 };
                 encoded.push(c);
             },
-            &FrameContent::UnnumberedAcknowledge { ref final_bit } => {
+            FrameContent::UnnumberedAcknowledge(ref ua) => {
                 let mut c: u8 = 0b0110_0011;
-                c |= if *final_bit { 1 << 4 } else { 0 };
+                c |= if ua.final_bit { 1 << 4 } else { 0 };
                 encoded.push(c);
             },
-            &FrameContent::FrameReject { ref final_bit, ref rejected_control_field_raw, ref z, ref y, ref x, ref w,
-                    ref receive_sequence, ref send_sequence, ref command_response } => {
+            FrameContent::FrameReject(ref fr) => {
                 let mut c: u8 = 0b1000_0111;
-                c |= if *final_bit { 1 << 4 } else { 0 };
+                c |= if fr.final_bit { 1 << 4 } else { 0 };
                 encoded.push(c);
                 let mut frmr1: u8 = 0;
-                frmr1 |= if *z { 1 << 3 } else { 0 };
-                frmr1 |= if *y { 1 << 2 } else { 0 };
-                frmr1 |= if *x { 1 << 1 } else { 0 };
-                frmr1 |= if *w { 1 << 0 } else { 0 };
+                frmr1 |= if fr.z { 1 << 3 } else { 0 };
+                frmr1 |= if fr.y { 1 << 2 } else { 0 };
+                frmr1 |= if fr.x { 1 << 1 } else { 0 };
+                frmr1 |= if fr.w { 1 << 0 } else { 0 };
                 encoded.push(frmr1);
                 let mut frmr2: u8 = 0;
-                frmr2 |= (receive_sequence & 0b0000_0111) << 5;
-                frmr2 |= if *command_response == CommandResponse::Response { 1 << 4 } else { 0 };
-                frmr2 |= (send_sequence & 0b0000_0111) << 1;
+                frmr2 |= (fr.receive_sequence & 0b0000_0111) << 5;
+                frmr2 |= if fr.command_response == CommandResponse::Response { 1 << 4 } else { 0 };
+                frmr2 |= (fr.send_sequence & 0b0000_0111) << 1;
                 encoded.push(frmr2);
-                encoded.push(*rejected_control_field_raw);
+                encoded.push(fr.rejected_control_field_raw);
             },
-            &FrameContent::UnnumberedInformation { ref pid, ref info, ref poll_or_final } => {
+            FrameContent::UnnumberedInformation(ref ui) => {
                 let mut c: u8 = 0b0000_0011;
-                c |= if *poll_or_final { 1 << 4 } else { 0 };
+                c |= if ui.poll_or_final { 1 << 4 } else { 0 };
                 encoded.push(c);
-                encoded.push(pid.to_byte());
-                encoded.extend(info);
+                encoded.push(ui.pid.to_byte());
+                encoded.extend(&ui.info);
             }
         }
 
@@ -346,10 +373,10 @@ impl Ax25Frame {
     /// Most applications will need to work with the Vec<u8> info directly.
     pub fn info_string_lossy(&self) -> Option<String> {
         match self.content {
-            FrameContent::Information { ref info, .. }
-                => Some(String::from_utf8_lossy(&info).into_owned()),
-            FrameContent::UnnumberedInformation { ref info, .. }
-                => Some(String::from_utf8_lossy(&info).into_owned()),
+            FrameContent::Information(ref i)
+                => Some(String::from_utf8_lossy(&i.info).into_owned()),
+            FrameContent::UnnumberedInformation(ref ui)
+                => Some(String::from_utf8_lossy(&ui.info).into_owned()),
             _ => None
         }
     }
@@ -447,13 +474,13 @@ fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         return parse_err("Missing PID field");
     }
     let c = bytes[0]; // control octet
-    Ok(FrameContent::Information {
+    Ok(FrameContent::Information( Information {
         receive_sequence: (c & 0b1110_0000) >> 5,
         send_sequence: (c & 0b0000_1110) >> 1,
         poll: (c & 0b0001_0000) > 0,
         pid: ProtocolIdentifier::from_byte(&bytes[1]),
         info: bytes[2..].iter().cloned().collect() // could be empty vec
-    })
+    }))
 }
 
 fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
@@ -464,18 +491,18 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     let poll_or_final = (c & 0b0001_0000) > 0;
 
     match c & 0b0000_1111 {
-        0b0000_0001 => Ok(FrameContent::ReceiveReady {
+        0b0000_0001 => Ok(FrameContent::ReceiveReady( ReceiveReady {
             receive_sequence: n_r,
             poll_or_final: poll_or_final
-        }),
-        0b0000_0101 => Ok(FrameContent::ReceiveNotReady {
+        })),
+        0b0000_0101 => Ok(FrameContent::ReceiveNotReady( ReceiveNotReady {
             receive_sequence: n_r,
             poll_or_final: poll_or_final
-        }),
-        0b0000_1001 => Ok(FrameContent::Reject {
+        })),
+        0b0000_1001 => Ok(FrameContent::Reject( Reject {
             receive_sequence: n_r,
             poll_or_final: poll_or_final
-        }),
+        })),
         _ => parse_err("Unrecognised S field type")
     }
 }
@@ -490,10 +517,10 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
 
     // Ignore the P/F bit for identifying the command or response
     match c & 0b1110_1111 {
-        0b0010_1111 => Ok(FrameContent::SetAsynchronousBalancedMode { poll: poll_or_final }),
-        0b0100_0011 => Ok(FrameContent::Disconnect { poll: poll_or_final }),
-        0b0000_1111 => Ok(FrameContent::DisconnectedMode { final_bit: poll_or_final }),
-        0b0110_0011 => Ok(FrameContent::UnnumberedAcknowledge { final_bit: poll_or_final }),
+        0b0010_1111 => Ok(FrameContent::SetAsynchronousBalancedMode( SetAsynchronousBalancedMode { poll: poll_or_final })),
+        0b0100_0011 => Ok(FrameContent::Disconnect( Disconnect { poll: poll_or_final })),
+        0b0000_1111 => Ok(FrameContent::DisconnectedMode( DisconnectedMode { final_bit: poll_or_final })),
+        0b0110_0011 => Ok(FrameContent::UnnumberedAcknowledge( UnnumberedAcknowledge { final_bit: poll_or_final })),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
         _ => parse_err("Unrecognised U field type")
@@ -505,11 +532,11 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         return parse_err("Missing PID field");
     }
     // Control, then PID, then Info
-    Ok(FrameContent::UnnumberedInformation {
+    Ok(FrameContent::UnnumberedInformation( UnnumberedInformation {
         poll_or_final: bytes[0] & 0b0001_0000 > 0,
         pid: ProtocolIdentifier::from_byte(&bytes[1]),
         info: bytes[2..].iter().cloned().collect()
-    })
+    }))
 }
 
 fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
@@ -517,7 +544,7 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     if bytes.len() != 4 {
         return parse_err("Wrong size for FRMR info");
     }
-    Ok(FrameContent::FrameReject {
+    Ok(FrameContent::FrameReject( FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
         rejected_control_field_raw: bytes[3],
         z: bytes[1] & 0b0000_1000 > 0,
@@ -530,7 +557,7 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
             false => CommandResponse::Command
         },
         send_sequence: (bytes[2] & 0b0000_1110) >> 1
-    })
+    }))
 }
 
 /// Parse the content of the frame starting from the control field
