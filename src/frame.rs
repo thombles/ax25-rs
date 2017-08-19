@@ -588,13 +588,13 @@ fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
 
 #[test]
 fn pid_test() {
-    assert_eq!(get_pid_from_byte(&0x01), ProtocolIdentifier::X25Plp);
-    assert_eq!(get_pid_from_byte(&0xCA), ProtocolIdentifier::Appletalk);
-    assert_eq!(get_pid_from_byte(&0xFF), ProtocolIdentifier::Escape);
-    assert_eq!(get_pid_from_byte(&0x45), ProtocolIdentifier::Unknown(0x45));
-    assert_eq!(get_pid_from_byte(&0x10), ProtocolIdentifier::Layer3Impl);
-    assert_eq!(get_pid_from_byte(&0x20), ProtocolIdentifier::Layer3Impl);
-    assert_eq!(get_pid_from_byte(&0xA5), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(&0x01), ProtocolIdentifier::X25Plp);
+    assert_eq!(ProtocolIdentifier::from_byte(&0xCA), ProtocolIdentifier::Appletalk);
+    assert_eq!(ProtocolIdentifier::from_byte(&0xFF), ProtocolIdentifier::Escape);
+    assert_eq!(ProtocolIdentifier::from_byte(&0x45), ProtocolIdentifier::Unknown(0x45));
+    assert_eq!(ProtocolIdentifier::from_byte(&0x10), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(&0x20), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(&0xA5), ProtocolIdentifier::Layer3Impl);
 }
 
 #[test]
@@ -609,4 +609,32 @@ fn test_address_fromstr() {
     assert!(Address::from_str("VK7NTK-16").is_err());
     assert!(Address::from_str("8").is_err());
     assert!(Address::from_str("vk7n--1").is_err());
+}
+
+#[test]
+fn test_round_trips() {
+    use std::fs::{read_dir, File};
+    use std::io::Read;
+
+    let mut paths: Vec<_> = read_dir("testdata/linux-ax0").unwrap()
+                                            .map(|r| r.unwrap())
+                                            .collect();
+    paths.sort_by_key(|dir| dir.path());
+    for entry in paths {
+        let entry_path = entry.path();
+        let filename = entry_path.to_str().unwrap();
+        let mut file = File::open(filename).unwrap();
+        let mut frame_data: Vec<u8> = Vec::new();
+        let _ = file.read_to_end(&mut frame_data);
+        // Skip the leading null byte. A quirk as they came from Linux AF_PACKET.
+        let frame_data_fixed = &frame_data[1..];
+        
+        match Ax25Frame::from_bytes(frame_data_fixed) {
+            Ok(parsed) => {
+                // Should be identical when re-encoded
+                assert_eq!(frame_data_fixed, &parsed.to_bytes()[..])
+            },
+            Err(e) => println!("Could not parse! {}", e)
+        };
+    }
 }
