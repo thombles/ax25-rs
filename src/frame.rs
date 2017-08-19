@@ -2,7 +2,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::fmt;
 
-// Mostly from AX.25 2.2 spec which has far more examples than 2.0
+/// Human-readable protocol identifiers. These are mostly from the AX.25 2.2 spec which has far more examples than 2.0.
 #[derive(Debug, PartialEq)]
 pub enum ProtocolIdentifier {
     Layer3Impl,
@@ -68,6 +68,7 @@ impl ProtocolIdentifier {
     }
 }
 
+/// Indicates whether a given frame is a Command or a Response.
 #[derive(Debug, PartialEq)]
 pub enum CommandResponse {
     Command,
@@ -77,91 +78,92 @@ pub enum CommandResponse {
 /// Information (I) frame
 #[derive(Debug, PartialEq)]
 pub struct Information {
-    pid: ProtocolIdentifier,
-    info: Vec<u8>,
-    receive_sequence: u8,
-    send_sequence: u8,
-    poll: bool
+    pub pid: ProtocolIdentifier,
+    pub info: Vec<u8>,
+    pub receive_sequence: u8,
+    pub send_sequence: u8,
+    pub poll: bool
 }
 
 /// RR Supervisory (S) frame
 #[derive(Debug, PartialEq)]
 pub struct ReceiveReady {
-    receive_sequence: u8,
-    poll_or_final: bool
+    pub receive_sequence: u8,
+    pub poll_or_final: bool
 }
 
 /// RNR Supervisory (S) frame
 #[derive(Debug, PartialEq)]
 pub struct ReceiveNotReady {
-    receive_sequence: u8,
-    poll_or_final: bool
+    pub receive_sequence: u8,
+    pub poll_or_final: bool
 }
 
 /// REJ Supervisory (S) frame
 #[derive(Debug, PartialEq)]
 pub struct Reject {
-    receive_sequence: u8,
-    poll_or_final: bool
+    pub receive_sequence: u8,
+    pub poll_or_final: bool
 }
 
 /// SABM Unnumbered (U) frame
 #[derive(Debug, PartialEq)]
 pub struct SetAsynchronousBalancedMode {
-    poll: bool
+    pub poll: bool
 }
 
 /// DISC Unnumbered (U) frame
 #[derive(Debug, PartialEq)]
 pub struct Disconnect {
-    poll: bool
+    pub poll: bool
 }
 
 /// DM Unnumbered (U) frame
 #[derive(Debug, PartialEq)]
 pub struct DisconnectedMode {
-    final_bit: bool // 'final' is a rust keyword
+    pub final_bit: bool // 'final' is a rust keyword
 }
 
 /// UA Unnumbered (U) frame
 #[derive(Debug, PartialEq)]
 pub struct UnnumberedAcknowledge {
-    final_bit: bool
+    pub final_bit: bool
 }
 
 /// FRMR Unnumbered (U) frame. Flags correspond to names in the AX.25 specification.
 #[derive(Debug, PartialEq)]
 pub struct FrameReject {
-    final_bit: bool,
+    pub final_bit: bool,
     /// A raw copy of the control field in the frame that was rejected
-    rejected_control_field_raw: u8,
+    pub rejected_control_field_raw: u8,
     /// The attached control field contained an invalid Receive Sequence Number
-    z: bool,
+    pub z: bool,
     /// The information field of a received frame exceeded the maximum allowable length.
-    y: bool,
+    pub y: bool,
     /// A U or S frame was received that contained an information field.
-    x: bool,
+    pub x: bool,
     /// The received control field was invalid or not implemented.
-    w: bool,
-    receive_sequence: u8,
-    send_sequence: u8,
-    command_response: CommandResponse
+    pub w: bool,
+    pub receive_sequence: u8,
+    pub send_sequence: u8,
+    pub command_response: CommandResponse
 }
 
 /// UI Unnumbered Information frame
 #[derive(Debug, PartialEq)]
 pub struct UnnumberedInformation {
-    pid: ProtocolIdentifier,
-    info: Vec<u8>,
-    poll_or_final: bool
+    pub pid: ProtocolIdentifier,
+    pub info: Vec<u8>,
+    pub poll_or_final: bool
 }
 
 /// Placeholder for when the Address part was parseable but not the control field
 #[derive(Debug, PartialEq)]
 pub struct UnknownContent {
-    raw: Vec<u8>
+    pub raw: Vec<u8>
 }
 
+/// The body of the frame after the end of the address field
 #[derive(Debug, PartialEq)]
 pub enum FrameContent {
     Information(Information),
@@ -262,6 +264,7 @@ impl FrameContent {
     }
 }
 
+/// Error type when parsing fails due to a malformed frame
 #[derive(Debug, Default)]
 pub struct ParseError {
     msg: String
@@ -286,10 +289,13 @@ fn parse_err<T>(msg: &str) -> Result<T,Box<Error>> {
     Err(Box::new(ParseError { msg: msg.to_string() }))
 }
 
+/// A source or destination of an AX.25 frame, combining a callsign with an SSID.
 #[derive(Debug, PartialEq)]
 pub struct Address {
-    callsign: String,
-    ssid: u8,
+    // An alphanumeric ASCII callsign of maximum length 6, e.g. "VK7NTK"
+    pub callsign: String,
+    /// Secondary Station Identifier, from 0 to 15
+    pub ssid: u8,
     c_bit: bool
 }
 
@@ -359,17 +365,19 @@ impl FromStr for Address {
     }
 }
 
+/// A single hop in the frame's route
 #[derive(Debug)]
 pub struct RouteEntry {
     pub repeater: Address,
     pub has_repeated: bool
 }
 
+/// A strongly-typed representation of a single AX.25 frame.
 #[derive(Debug)]
 pub struct Ax25Frame {
     pub source: Address,
     pub destination: Address,
-    /// The route the packet has taken/will take according to repeater entries in the address field
+    /// The route the frame has taken/will take according to repeater entries in the address field
     pub route: Vec<RouteEntry>,
     /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
     /// or a response, as part of the address field.
@@ -391,6 +399,7 @@ impl Ax25Frame {
         }
     }
 
+    /// Parse raw bytes into an Ax25Frame if possible.
     pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<Error>> {
         // Skip over leading null bytes
         // Linux AF_PACKET has oen of these - we will strip it out in the linux module
@@ -434,6 +443,7 @@ impl Ax25Frame {
         })
     }
 
+    /// Encode an Ax25Frame struct as raw bytes for transmission
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut frame = Vec::new();
         let (dest_c_bit, src_c_bit) = match self.command_or_response {
