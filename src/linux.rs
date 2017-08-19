@@ -11,16 +11,19 @@ const ETH_P_AX25: u16 = 0x0002; // from if_ether.h for SOCK_RAW
 const SIOCGIFHWADDR: c_ulong = 0x8927; // from sockios.h in the linux kernel
 const SIOCGIFINDEX: c_ulong = 0x8933;
 
+/// An active AX.25 network interface, e.g. "ax0"
 pub struct NetDev {
     pub name: String,
     pub ifindex: i32
 }
 
+/// An open socket for sending and receiving AX.25 frames
 pub struct Ax25RawSocket {
     fd: i32
 }
 
 impl Ax25RawSocket {
+    /// Create a new socket for sending and receiving raw AX.25 frames. This requires root or CAP_NET_ADMIN.
     pub fn new() -> io::Result<Ax25RawSocket> {
         match unsafe { socket(AF_PACKET, SOCK_RAW, ETH_P_AX25.to_be() as i32) } {
             -1 => Err(Error::last_os_error()),
@@ -30,6 +33,7 @@ impl Ax25RawSocket {
         }
     }
 
+    /// Close an open AX.25 socket.
     pub fn close(&mut self) -> io::Result<()> {
         match unsafe { close(self.fd) } {
             -1 => Err(Error::last_os_error()),
@@ -37,6 +41,7 @@ impl Ax25RawSocket {
         }
     }
 
+    /// Find all AX.25 interfaces on the system
     pub fn list_ax25_interfaces(&self) -> io::Result<Vec<NetDev>> {
         let dev_file = File::open("/proc/net/dev")?;
         let mut devices: Vec<NetDev> = Vec::new();
@@ -56,6 +61,7 @@ impl Ax25RawSocket {
         Ok(devices)
     }
 
+    /// Send a frame to a particular interface, specified by its index
     pub fn send_frame(&self, frame: &[u8], ifindex: i32) -> io::Result<()> {
         // The Linux interface demands a single null byte prefix on the actual packet
         let mut prefixed_frame: Vec<u8> = Vec::with_capacity(frame.len() + 1);
@@ -82,6 +88,7 @@ impl Ax25RawSocket {
         }
     }
 
+    /// Block to receive an incoming AX.25 frame from any interface
     pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
         let mut buf: [u8; 1024] = [0; 1024];
         // Not sure we need the address but it might come in handy someday
