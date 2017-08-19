@@ -1,5 +1,9 @@
 # ax25
 
+<a href="https://crates.io/crates/ax25">
+    <img src="https://img.shields.io/crates/v/ax25.svg" alt="crates.io">
+</a>
+
 This rust library provides AX.25 frame encoding and decoding and offers support for
 sending and receiving data from radio interfaces.
 
