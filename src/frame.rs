@@ -156,6 +156,12 @@ pub struct UnnumberedInformation {
     poll_or_final: bool
 }
 
+/// Placeholder for when the Address part was parseable but not the control field
+#[derive(Debug, PartialEq)]
+pub struct UnknownContent {
+    raw: Vec<u8>
+}
+
 #[derive(Debug, PartialEq)]
 pub enum FrameContent {
     Information(Information),
@@ -167,7 +173,8 @@ pub enum FrameContent {
     DisconnectedMode(DisconnectedMode),
     UnnumberedAcknowledge(UnnumberedAcknowledge),
     FrameReject(FrameReject),
-    UnnumberedInformation(UnnumberedInformation)
+    UnnumberedInformation(UnnumberedInformation),
+    UnknownContent(UnknownContent)
 }
 
 impl FrameContent {
@@ -245,6 +252,9 @@ impl FrameContent {
                 encoded.push(c);
                 encoded.push(ui.pid.to_byte());
                 encoded.extend(&ui.info);
+            },
+            FrameContent::UnknownContent(ref uc) => {
+                encoded.extend(&uc.raw);
             }
         }
 
@@ -569,7 +579,9 @@ fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
         c if c & 0x03 == 0x01 => parse_s_frame(bytes),
         c if c & 0x03 == 0x03 => parse_u_frame(bytes),
-        _ => parse_err("Unrecognised control field")
+        _ => Ok(FrameContent::UnknownContent( UnknownContent {
+            raw: bytes.to_vec()
+        }))
     }
 }
 
