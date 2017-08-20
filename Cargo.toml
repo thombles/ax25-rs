@@ -8,6 +8,9 @@ keywords = ["amateur", "radio", "packet", "ham"]
 categories = ["network-programming"]
 license = "Apache-2.0"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 libc = { version = "0.2.29", optional = true }
 
