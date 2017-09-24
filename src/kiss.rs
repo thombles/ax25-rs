@@ -37,6 +37,17 @@ impl TcpKissInterface {
             self.buffer.extend(buf.iter().take(n_bytes));
         }
     }
+
+    pub fn send_frame(&mut self, frame: &[u8]) -> io::Result<()> {
+        // 0x00 is the KISS command byte, which is two nybbles
+        // port = 0
+        // command = 0 (all following bytes are a data frame to transmit)
+        self.stream.write(&[FEND, 0x00])?;
+        self.stream.write(frame)?;
+        self.stream.write(&[FEND])?;
+        self.stream.flush()?;
+        Ok(())
+    }
 }
 
 fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
