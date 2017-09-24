@@ -10,3 +10,4 @@ pub mod frame;
 #[cfg(feature = "linux")]
 pub mod linux;
 
+pub mod kiss;
