@@ -312,7 +312,7 @@ impl fmt::Display for Address {
 }
 
 impl FromStr for Address {
-    type Err = Box<Error>;
+    type Err = Box<dyn Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split("-").collect();
@@ -375,7 +375,7 @@ impl Ax25Frame {
     }
 
     /// Parse raw bytes into an Ax25Frame if possible.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<Error>> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<dyn Error>> {
         // Skip over leading null bytes
         // Linux AF_PACKET has oen of these - we will strip it out in the linux module
         // but also keep the protection here
@@ -450,7 +450,7 @@ impl fmt::Display for Ax25Frame {
     }
 }
 
-fn parse_address(bytes: &[u8]) -> Result<Address, Box<Error>> {
+fn parse_address(bytes: &[u8]) -> Result<Address, Box<dyn Error>> {
     let mut dest_utf8: Vec<u8> = bytes[0..6].iter()
         .rev()
         .map(|&c| c >> 1)
@@ -464,7 +464,7 @@ fn parse_address(bytes: &[u8]) -> Result<Address, Box<Error>> {
     })
 }
 
-fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     if bytes.len() < 2 {
         return Err("Missing PID field")?;
     }
@@ -478,7 +478,7 @@ fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }))
 }
 
-fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     // These all have the same general layout
     // There should be no PID or info following this control byte
     let c = bytes[0];
@@ -502,7 +502,7 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }
 }
 
-fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     // The only moving part in control for U frames is the P/F bit
     // Two special cases to handle:
     // FRMR is followed by a 3-byte information field that must be parsed specially
@@ -522,7 +522,7 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }
 }
 
-fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     if bytes.len() < 2 {
         return Err("Missing PID field")?;
     }
@@ -534,7 +534,7 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
     }))
 }
 
-fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
         return Err("Wrong size for FRMR info")?;
@@ -556,7 +556,7 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
 }
 
 /// Parse the content of the frame starting from the control field
-fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<Error>> {
+fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     if bytes.len() == 0 {
         return Err("Zero content length")?;
     }
