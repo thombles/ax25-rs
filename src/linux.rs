@@ -5,8 +5,8 @@ use std::io::{self, Error};
 use std::mem;
 
 use libc::{
-    c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, sockaddr, sockaddr_ll, socket,
-    socklen_t, AF_AX25, AF_PACKET, SOCK_RAW,
+    c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, sockaddr_ll, socket, socklen_t,
+    AF_AX25, AF_PACKET, SOCK_RAW,
 };
 
 const ETH_P_AX25: u16 = 0x0002; // from if_ether.h for SOCK_RAW
@@ -49,7 +49,7 @@ impl Ax25RawSocket {
         let lines = reader.lines();
         for l in lines.skip(2) {
             if let Ok(line) = l {
-                let device_name = line.trim().split(":").next().unwrap();
+                let device_name = line.trim().split(':').next().unwrap();
                 if let Some(net_dev) = get_ax25_netdev(&device_name, self.fd) {
                     devices.push(net_dev);
                 }
@@ -76,7 +76,7 @@ impl Ax25RawSocket {
         };
 
         match unsafe {
-            let sa_ptr = mem::transmute::<*const sockaddr_ll, *const sockaddr>(&sa);
+            let sa_ptr = &sa as *const libc::sockaddr_ll as *const libc::sockaddr;
             sendto(
                 self.fd,
                 prefixed_frame.as_ptr() as *const c_void,
@@ -98,7 +98,7 @@ impl Ax25RawSocket {
         let mut addr_struct: sockaddr_ll = unsafe { mem::zeroed() };
         let len: usize;
         unsafe {
-            let sa_ptr = mem::transmute::<*mut sockaddr_ll, *mut sockaddr>(&mut addr_struct);
+            let sa_ptr = &mut addr_struct as *mut libc::sockaddr_ll as *mut libc::sockaddr;
             let mut sa_in_sz: socklen_t = mem::size_of::<sockaddr_ll>() as socklen_t;
             len = match recvfrom(
                 self.fd,
