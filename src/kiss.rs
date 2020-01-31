@@ -1,8 +1,8 @@
 use std::io;
 use std::io::prelude::*;
+use std::net::Shutdown;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
-use std::net::Shutdown;
 
 const FEND: u8 = 0xC0;
 const FESC: u8 = 0xDB;
@@ -11,7 +11,7 @@ const TFESC: u8 = 0xDD;
 
 pub struct TcpKissInterface {
     stream: TcpStream,
-    buffer: Vec<u8>
+    buffer: Vec<u8>,
 }
 
 impl TcpKissInterface {
@@ -19,7 +19,7 @@ impl TcpKissInterface {
         let stream = TcpStream::connect(addr)?;
         Ok(TcpKissInterface {
             stream,
-            buffer: Vec::new()
+            buffer: Vec::new(),
         })
     }
 
@@ -56,11 +56,11 @@ fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
     enum Scan {
         LookingForStartMarker,
         Data,
-        Escaped
+        Escaped,
     }
     let mut state = Scan::LookingForStartMarker;
     let mut final_idx = 0;
-    
+
     // Check for possible frame read-only until we know we have a complete frame
     // If we take one out, clear out buffer up to the final index
     for (idx, &c) in buffer.iter().enumerate() {
@@ -69,7 +69,7 @@ fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
                 if c == FEND {
                     state = Scan::Data;
                 }
-            },
+            }
             Scan::Data => {
                 if c == FEND {
                     if !possible_frame.is_empty() {
@@ -82,7 +82,7 @@ fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
                 } else {
                     possible_frame.push(c);
                 }
-            },
+            }
             Scan::Escaped => {
                 if c == TFEND {
                     possible_frame.push(FEND);
@@ -140,14 +140,23 @@ fn test_consecutive_marker() {
 #[test]
 fn test_escapes() {
     let mut rx = vec![FEND, 0x01, FESC, TFESC, 0x02, FESC, TFEND, 0x03, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, FESC, 0x02, FEND, 0x03]));
+    assert_eq!(
+        make_frame_from_buffer(&mut rx),
+        Some(vec![0x01, FESC, 0x02, FEND, 0x03])
+    );
     assert_eq!(rx, vec![FEND]);
 }
 
 #[test]
 fn test_incorrect_escape_skipped() {
-    let mut rx = vec![FEND, 0x01, FESC, 0x04, TFESC /* passes normally without leading FESC */, 0x02, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, TFESC, 0x02]));
+    let mut rx = vec![
+        FEND, 0x01, FESC, 0x04, TFESC, /* passes normally without leading FESC */
+        0x02, FEND,
+    ];
+    assert_eq!(
+        make_frame_from_buffer(&mut rx),
+        Some(vec![0x01, TFESC, 0x02])
+    );
     assert_eq!(rx, vec![FEND]);
 }
 
