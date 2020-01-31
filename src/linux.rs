@@ -132,7 +132,7 @@ fn get_ax25_netdev(name: &str, fd: i32) -> Option<NetDev> {
     let mut req = ifreq::default();
     let if_name = name.to_owned();
     for (d, s) in req.ifr_name.iter_mut().zip(if_name.as_bytes()) {
-        *d = *s;
+        *d = *s as c_char;
     }
 
     if unsafe { ioctl(fd, SIOCGIFHWADDR, &mut req) } == -1 {
@@ -163,7 +163,7 @@ extern "C" {
 
 #[repr(C)]
 struct ifreq {
-    ifr_name: [u8; 16],
+    ifr_name: [c_char; 16],
     data: ifreq_union,
 }
 
