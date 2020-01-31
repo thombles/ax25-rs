@@ -112,12 +112,12 @@ impl Ax25RawSocket {
                 len => len as usize,
             };
         }
-        let ref valid_buf = buf[0..len];
+        let valid_buf = &buf[0..len];
 
         // In practice AF_PACKET gives us one leading one null byte
         // These are unhelpful so we will skip all leading null bytes
         let filtered: Vec<u8> = valid_buf
-            .into_iter()
+            .iter()
             .skip_while(|&c| *c == 0)
             .cloned()
             .collect();
@@ -207,7 +207,7 @@ impl ifreq_union {
             .collect::<Vec<u8>>();
         addr_utf8.reverse();
         let ssid = (self.data[8] >> 1) & 0x0f;
-        if let Some(addr) = String::from_utf8(addr_utf8).ok() {
+        if let Ok(addr) = String::from_utf8(addr_utf8) {
             return Some(format!("{}-{}", addr, ssid));
         }
         None
