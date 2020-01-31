@@ -48,14 +48,11 @@ impl Ax25RawSocket {
         let reader = BufReader::new(dev_file);
         let lines = reader.lines();
         for l in lines.skip(2) {
-            match l {
-                Ok(line) => {
-                    let device_name = line.trim().split(":").next().unwrap();
-                    if let Some(net_dev) = get_ax25_netdev(&device_name, self.fd) {
-                        devices.push(net_dev);
-                    }
+            if let Ok(line) = l {
+                let device_name = line.trim().split(":").next().unwrap();
+                if let Some(net_dev) = get_ax25_netdev(&device_name, self.fd) {
+                    devices.push(net_dev);
                 }
-                Err(_) => (),
             }
         }
         Ok(devices)
