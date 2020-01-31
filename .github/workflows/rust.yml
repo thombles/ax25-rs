@@ -3,16 +3,20 @@ name: Rust
 on: [push, pull_request]
 
 jobs:
-  build:
-
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --features linux
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --features linux
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build
+    - name: Run tests
+      run: cargo test
