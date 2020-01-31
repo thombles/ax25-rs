@@ -11,6 +11,8 @@ jobs:
       run: cargo build --features linux
     - name: Run tests
       run: cargo test --features linux
+    - name: Clippy
+      run: cargo clippy --features linux
 
   build-windows:
     runs-on: windows-latest
@@ -20,3 +22,6 @@ jobs:
       run: cargo build
     - name: Run tests
       run: cargo test
+    - name: Clippy
+      run: cargo clippy
+
