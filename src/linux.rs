@@ -29,7 +29,7 @@ impl Ax25RawSocket {
     pub fn new() -> io::Result<Ax25RawSocket> {
         match unsafe { socket(AF_PACKET, SOCK_RAW, ETH_P_AX25.to_be() as i32) } {
             -1 => Err(Error::last_os_error()),
-            fd => Ok(Ax25RawSocket { fd: fd }),
+            fd => Ok(Ax25RawSocket { fd }),
         }
     }
 
@@ -153,7 +153,7 @@ fn get_ax25_netdev(name: &str, fd: i32) -> Option<NetDev> {
 
     Some(NetDev {
         name: hw_addr,
-        ifindex: ifindex,
+        ifindex,
     })
 }
 
