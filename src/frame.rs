@@ -24,10 +24,10 @@ pub enum ProtocolIdentifier {
 }
 
 impl ProtocolIdentifier {
-    fn from_byte(byte: &u8) -> ProtocolIdentifier {
-        match *byte {
-            pid if pid & 0b00110000 == 0b00010000
-                || pid & 0b00110000 == 0b00100000 => ProtocolIdentifier::Layer3Impl,
+    fn from_byte(byte: u8) -> ProtocolIdentifier {
+        match byte {
+            pid if pid & 0b0011_0000 == 0b0001_0000
+                || pid & 0b0011_0000 == 0b0010_0000 => ProtocolIdentifier::Layer3Impl,
             0x01 => ProtocolIdentifier::X25Plp,
             0x06 => ProtocolIdentifier::CompressedTcpIp,
             0x07 => ProtocolIdentifier::UncompressedTcpIp,
@@ -47,23 +47,23 @@ impl ProtocolIdentifier {
     }
 
     fn to_byte(&self) -> u8 {
-        match self {
-            &ProtocolIdentifier::Layer3Impl => 0b00010000,
-            &ProtocolIdentifier::X25Plp => 0x01,
-            &ProtocolIdentifier::CompressedTcpIp => 0x06,
-            &ProtocolIdentifier::UncompressedTcpIp => 0x07,
-            &ProtocolIdentifier::SegmentationFragment => 0x08,
-            &ProtocolIdentifier::TexnetDatagram => 0xC3,
-            &ProtocolIdentifier::LinkQuality => 0xC4,
-            &ProtocolIdentifier::Appletalk => 0xCA,
-            &ProtocolIdentifier::AppletalkArp => 0xCB,
-            &ProtocolIdentifier::ArpaIp => 0xCC,
-            &ProtocolIdentifier::ArpaAddress => 0xCD,
-            &ProtocolIdentifier::Flexnet => 0xCE,
-            &ProtocolIdentifier::NetRom => 0xCF,
-            &ProtocolIdentifier::None => 0xF0,
-            &ProtocolIdentifier::Escape => 0xFF,
-            &ProtocolIdentifier::Unknown(pid) => pid
+        match *self {
+            ProtocolIdentifier::Layer3Impl => 0b0001_0000,
+            ProtocolIdentifier::X25Plp => 0x01,
+            ProtocolIdentifier::CompressedTcpIp => 0x06,
+            ProtocolIdentifier::UncompressedTcpIp => 0x07,
+            ProtocolIdentifier::SegmentationFragment => 0x08,
+            ProtocolIdentifier::TexnetDatagram => 0xC3,
+            ProtocolIdentifier::LinkQuality => 0xC4,
+            ProtocolIdentifier::Appletalk => 0xCA,
+            ProtocolIdentifier::AppletalkArp => 0xCB,
+            ProtocolIdentifier::ArpaIp => 0xCC,
+            ProtocolIdentifier::ArpaAddress => 0xCD,
+            ProtocolIdentifier::Flexnet => 0xCE,
+            ProtocolIdentifier::NetRom => 0xCF,
+            ProtocolIdentifier::None => 0xF0,
+            ProtocolIdentifier::Escape => 0xFF,
+            ProtocolIdentifier::Unknown(pid) => pid
         }
     }
 }
@@ -239,7 +239,7 @@ impl FrameContent {
                 frmr1 |= if fr.z { 1 << 3 } else { 0 };
                 frmr1 |= if fr.y { 1 << 2 } else { 0 };
                 frmr1 |= if fr.x { 1 << 1 } else { 0 };
-                frmr1 |= if fr.w { 1 << 0 } else { 0 };
+                frmr1 |= if fr.w { 1 } else { 0 };
                 encoded.push(frmr1);
                 let mut frmr2: u8 = 0;
                 frmr2 |= (fr.receive_sequence & 0b0000_0111) << 5;
@@ -315,28 +315,28 @@ impl FromStr for Address {
     type Err = Box<dyn Error>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split("-").collect();
+        let parts: Vec<&str> = s.split('-').collect();
         if parts.len() != 2 {
-            return Err("Address must be of the form CALL-#")?;
+            return Err("Address must be of the form CALL-#".into());
         }
 
         let callsign = parts[0].to_uppercase();
-        if callsign.len() == 0 || callsign.len() > 6 {
-            return Err("Callsign must be 1-6 letters/numbers")?;
+        if callsign.is_empty() || callsign.len() > 6 {
+            return Err("Callsign must be 1-6 letters/numbers".into());
         }
         for c in callsign.chars() {
             if !c.is_alphanumeric() {
-                return Err("Callsign must be alphanumeric only (space padding is handled internally)")?;
+                return Err("Callsign must be alphanumeric only (space padding is handled internally)".into());
             }
         }
         
         let ssid = parts[1].parse::<u8>()?;
         if ssid > 15 {
-            return Err("SSID must be from 0 to 15")?;
+            return Err("SSID must be from 0 to 15".into());
         }
 
         // c_bit will be set on transmit
-        Ok(Address { callsign: callsign, ssid: ssid, c_bit: false })
+        Ok(Address { callsign, ssid, c_bit: false })
     }
 }
 
@@ -383,10 +383,10 @@ impl Ax25Frame {
         let addr_end = bytes.iter().position(|&c| c & 0x01 == 0x01).ok_or("Couldn't find end of address field")?;
         let control = addr_end + 1;
         if addr_end - addr_start + 1 < 14 { // +1 because the "terminator" is actually within the last byte
-            return Err(format!("Address field too short: {} {}", addr_start, addr_end))?;
+            return Err(format!("Address field too short: {} {}", addr_start, addr_end).into());
         }
         if control >= bytes.len() {
-            return Err(format!("Packet is unreasonably short: {} bytes", bytes.len() ))?;
+            return Err(format!("Packet is unreasonably short: {} bytes", bytes.len() ).into());
         }
 
         let dest = parse_address(&bytes[addr_start..addr_start+7])?;
@@ -397,7 +397,7 @@ impl Ax25Frame {
             let repeater = parse_address(&bytes[addr_start + 14 + i * 7 .. addr_start + 14 + (i+1) * 7])?;
             let entry = RouteEntry {
                 has_repeated: repeater.c_bit, // The "C" bit in an address happens to be the repeated bit for a repeater
-                repeater: repeater,
+                repeater,
             };
             route.push(entry);
         }
@@ -412,9 +412,9 @@ impl Ax25Frame {
         Ok(Ax25Frame {
             source: src,
             destination: dest,
-            route: route,
-            content: content,
-            command_or_response: command_or_response
+            route,
+            content,
+            command_or_response
         })
     }
 
@@ -466,15 +466,15 @@ fn parse_address(bytes: &[u8]) -> Result<Address, Box<dyn Error>> {
 
 fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     if bytes.len() < 2 {
-        return Err("Missing PID field")?;
+        return Err("Missing PID field".into());
     }
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information( Information {
         receive_sequence: (c & 0b1110_0000) >> 5,
         send_sequence: (c & 0b0000_1110) >> 1,
         poll: (c & 0b0001_0000) > 0,
-        pid: ProtocolIdentifier::from_byte(&bytes[1]),
-        info: bytes[2..].iter().cloned().collect() // could be empty vec
+        pid: ProtocolIdentifier::from_byte(bytes[1]),
+        info: bytes[2..].to_vec() // could be empty vec
     }))
 }
 
@@ -488,17 +488,17 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     match c & 0b0000_1111 {
         0b0000_0001 => Ok(FrameContent::ReceiveReady( ReceiveReady {
             receive_sequence: n_r,
-            poll_or_final: poll_or_final
+            poll_or_final,
         })),
         0b0000_0101 => Ok(FrameContent::ReceiveNotReady( ReceiveNotReady {
             receive_sequence: n_r,
-            poll_or_final: poll_or_final
+            poll_or_final,
         })),
         0b0000_1001 => Ok(FrameContent::Reject( Reject {
             receive_sequence: n_r,
-            poll_or_final: poll_or_final
+            poll_or_final,
         })),
-        _ => Err("Unrecognised S field type")?
+        _ => Err("Unrecognised S field type".into())
     }
 }
 
@@ -518,26 +518,26 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
         0b0110_0011 => Ok(FrameContent::UnnumberedAcknowledge( UnnumberedAcknowledge { final_bit: poll_or_final })),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
-        _ => Err("Unrecognised U field type")?
+        _ => Err("Unrecognised U field type".into())
     }
 }
 
 fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     if bytes.len() < 2 {
-        return Err("Missing PID field")?;
+        return Err("Missing PID field".into());
     }
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation( UnnumberedInformation {
         poll_or_final: bytes[0] & 0b0001_0000 > 0,
-        pid: ProtocolIdentifier::from_byte(&bytes[1]),
-        info: bytes[2..].iter().cloned().collect()
+        pid: ProtocolIdentifier::from_byte(bytes[1]),
+        info: bytes[2..].to_vec(),
     }))
 }
 
 fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
-        return Err("Wrong size for FRMR info")?;
+        return Err("Wrong size for FRMR info".into());
     }
     Ok(FrameContent::FrameReject( FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
@@ -547,9 +547,10 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
         x: bytes[1] & 0b0000_0010 > 0,
         w: bytes[1] & 0b0000_0001 > 0,
         receive_sequence: (bytes[2] & 0b1110_0000) >> 5,
-        command_response: match bytes[2] & 0b0001_0000 > 0 {
-            true => CommandResponse::Response,
-            false => CommandResponse::Command
+        command_response: if bytes[2] & 0b0001_0000 > 0 {
+            CommandResponse::Response
+        } else {
+            CommandResponse::Command
         },
         send_sequence: (bytes[2] & 0b0000_1110) >> 1
     }))
@@ -557,8 +558,8 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
 
 /// Parse the content of the frame starting from the control field
 fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
-    if bytes.len() == 0 {
-        return Err("Zero content length")?;
+    if bytes.is_empty() {
+        return Err("Zero content length".into());
     }
     match bytes[0] {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
@@ -573,13 +574,13 @@ fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
 
 #[test]
 fn pid_test() {
-    assert_eq!(ProtocolIdentifier::from_byte(&0x01), ProtocolIdentifier::X25Plp);
-    assert_eq!(ProtocolIdentifier::from_byte(&0xCA), ProtocolIdentifier::Appletalk);
-    assert_eq!(ProtocolIdentifier::from_byte(&0xFF), ProtocolIdentifier::Escape);
-    assert_eq!(ProtocolIdentifier::from_byte(&0x45), ProtocolIdentifier::Unknown(0x45));
-    assert_eq!(ProtocolIdentifier::from_byte(&0x10), ProtocolIdentifier::Layer3Impl);
-    assert_eq!(ProtocolIdentifier::from_byte(&0x20), ProtocolIdentifier::Layer3Impl);
-    assert_eq!(ProtocolIdentifier::from_byte(&0xA5), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(0x01), ProtocolIdentifier::X25Plp);
+    assert_eq!(ProtocolIdentifier::from_byte(0xCA), ProtocolIdentifier::Appletalk);
+    assert_eq!(ProtocolIdentifier::from_byte(0xFF), ProtocolIdentifier::Escape);
+    assert_eq!(ProtocolIdentifier::from_byte(0x45), ProtocolIdentifier::Unknown(0x45));
+    assert_eq!(ProtocolIdentifier::from_byte(0x10), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(0x20), ProtocolIdentifier::Layer3Impl);
+    assert_eq!(ProtocolIdentifier::from_byte(0xA5), ProtocolIdentifier::Layer3Impl);
 }
 
 #[test]

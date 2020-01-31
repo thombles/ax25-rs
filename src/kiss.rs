@@ -18,7 +18,7 @@ impl TcpKissInterface {
     pub fn new<A: ToSocketAddrs>(addr: A) -> io::Result<TcpKissInterface> {
         let stream = TcpStream::connect(addr)?;
         Ok(TcpKissInterface {
-            stream: stream,
+            stream,
             buffer: Vec::new()
         })
     }
@@ -42,9 +42,9 @@ impl TcpKissInterface {
         // 0x00 is the KISS command byte, which is two nybbles
         // port = 0
         // command = 0 (all following bytes are a data frame to transmit)
-        self.stream.write(&[FEND, 0x00])?;
-        self.stream.write(frame)?;
-        self.stream.write(&[FEND])?;
+        self.stream.write_all(&[FEND, 0x00])?;
+        self.stream.write_all(frame)?;
+        self.stream.write_all(&[FEND])?;
         self.stream.flush()?;
         Ok(())
     }
@@ -88,12 +88,10 @@ fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
                     possible_frame.push(FEND);
                 } else if c == TFESC {
                     possible_frame.push(FESC);
-                } else if c == FEND {
-                    if !possible_frame.is_empty() {
-                        // Successfully read a non-zero-length frame
-                        final_idx = idx;
-                        break;
-                    }
+                } else if c == FEND && !possible_frame.is_empty() {
+                    // Successfully read a non-zero-length frame
+                    final_idx = idx;
+                    break;
                 }
                 state = Scan::Data;
             }
