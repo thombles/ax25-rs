@@ -12,7 +12,7 @@ jobs:
     - name: Run tests
       run: cargo test --features linux
     - name: Clippy
-      run: cargo clippy --features linux
+      run: cargo clippy --features linux -- -Dwarnings
 
   build-windows:
     runs-on: windows-latest
@@ -23,5 +23,5 @@ jobs:
     - name: Run tests
       run: cargo test
     - name: Clippy
-      run: cargo clippy
+      run: cargo clippy -- -Dwarnings
 
