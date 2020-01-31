@@ -163,7 +163,7 @@ extern "C" {
 
 #[repr(C)]
 struct ifreq {
-    ifr_name: [c_char; 16],
+    ifr_name: [u8; 16],
     data: ifreq_union,
 }
 
