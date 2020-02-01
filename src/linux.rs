@@ -1,12 +1,14 @@
+use libc::{c_char, c_int, c_ulong};
 use std::io::{self, Error};
-use libc::{c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, socket};
 
 #[cfg(target_os = "linux")]
-use libc::{sockaddr_ll, socklen_t, AF_AX25, AF_PACKET, SOCK_RAW};
-#[cfg(target_os = "linux")]
-use std::mem;
+use libc::{
+    c_void, close, recvfrom, sendto, sockaddr_ll, socket, socklen_t, AF_AX25, AF_PACKET, SOCK_RAW,
+};
 #[cfg(not(target_os = "linux"))]
 use std::io::ErrorKind;
+#[cfg(target_os = "linux")]
+use std::mem;
 
 const ETH_P_AX25: u16 = 0x0002; // from if_ether.h for SOCK_RAW
 const SIOCGIFHWADDR: c_ulong = 0x8927; // from sockios.h in the linux kernel
@@ -44,7 +46,7 @@ impl Ax25RawSocket {
     /// Find all AX.25 interfaces on the system
     pub fn list_ax25_interfaces(&self) -> io::Result<Vec<NetDev>> {
         use std::fs::File;
-        use std::io::{BufReader, BufRead};
+        use std::io::{BufRead, BufReader};
 
         let dev_file = File::open("/proc/net/dev")?;
         let mut devices: Vec<NetDev> = Vec::new();
@@ -128,12 +130,12 @@ impl Ax25RawSocket {
 impl Ax25RawSocket {
     /// Create a new socket for sending and receiving raw AX.25 frames. This requires root or CAP_NET_ADMIN.
     pub fn new() -> io::Result<Ax25RawSocket> {
-        Err(Error::new(ErrorKind::NotFound))
+        Err(Error::new(ErrorKind::NotFound, "only supported on linux"))
     }
 
     /// Close an open AX.25 socket.
     pub fn close(&mut self) -> io::Result<()> {
-        Err(Error::new(ErrorKind::NotFound))
+        Err(Error::new(ErrorKind::NotFound, "only supported on linux"))
     }
 
     /// Find all AX.25 interfaces on the system
@@ -143,12 +145,18 @@ impl Ax25RawSocket {
 
     /// Send a frame to a particular interface, specified by its index
     pub fn send_frame(&self, frame: &[u8], ifindex: i32) -> io::Result<()> {
-        Err(Error::new(ErrorKind::NotConnected))
+        Err(Error::new(
+            ErrorKind::NotConnected,
+            "only supported on linux",
+        ))
     }
 
     /// Block to receive an incoming AX.25 frame from any interface
     pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
-        Err(Error::new(ErrorKind::NotConnected))
+        Err(Error::new(
+            ErrorKind::NotConnected,
+            "only supported on linux",
+        ))
     }
 }
 
