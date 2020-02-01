@@ -14,7 +14,6 @@ pub struct Ax25RawSocket {
     fd: i32,
 }
 
-#[cfg(target_os = "linux")]
 impl Ax25RawSocket {
     /// Create a new socket for sending and receiving raw AX.25 frames. This requires root or CAP_NET_ADMIN.
     pub fn new() -> io::Result<Ax25RawSocket> {
