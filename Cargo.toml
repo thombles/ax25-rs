@@ -13,11 +13,7 @@ edition = "2018"
 all-features = true
 
 [dependencies]
-libc = { version = "0.2.29", optional = true }
+libc = "0.2"
 
 [dev-dependencies]
 chrono = "0.4"
-
-[features]
-default = ["libc"]
-linux = ["libc"]

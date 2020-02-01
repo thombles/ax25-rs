@@ -8,11 +8,11 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Check
-      run: cargo check --all-targets --features linux
+      run: cargo check --all-targets
     - name: Run tests
-      run: cargo test --features linux
+      run: cargo test
     - name: Clippy
-      run: cargo clippy --features linux -- -Dwarnings
+      run: cargo clippy -- -Dwarnings
 
   build-windows:
     runs-on: windows-latest

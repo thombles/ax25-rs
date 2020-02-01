@@ -7,7 +7,6 @@ pub mod frame;
 
 /// Interfacing with native AX.25 network interfaces on Linux. Works with frames of
 /// raw bytes that can be used in tandem with the `frame` module.
-#[cfg(feature = "linux")]
 pub mod linux;
 
 pub mod kiss;

@@ -4,10 +4,12 @@ use std::io::BufReader;
 use std::io::{self, Error};
 use std::mem;
 
-use libc::{
-    c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, sockaddr_ll, socket, socklen_t,
-    AF_AX25, AF_PACKET, SOCK_RAW,
-};
+use libc::{c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, socket, socklen_t, SOCK_RAW};
+
+#[cfg(target_os = "linux")]
+use libc::{sockaddr_ll, AF_AX25, AF_PACKET};
+#[cfg(not(target_os = "linux"))]
+use std::io::ErrorKind;
 
 const ETH_P_AX25: u16 = 0x0002; // from if_ether.h for SOCK_RAW
 const SIOCGIFHWADDR: c_ulong = 0x8927; // from sockios.h in the linux kernel
@@ -24,6 +26,7 @@ pub struct Ax25RawSocket {
     fd: i32,
 }
 
+#[cfg(target_os = "linux")]
 impl Ax25RawSocket {
     /// Create a new socket for sending and receiving raw AX.25 frames. This requires root or CAP_NET_ADMIN.
     pub fn new() -> io::Result<Ax25RawSocket> {
@@ -116,15 +119,40 @@ impl Ax25RawSocket {
 
         // In practice AF_PACKET gives us one leading one null byte
         // These are unhelpful so we will skip all leading null bytes
-        let filtered: Vec<u8> = valid_buf
-            .iter()
-            .skip_while(|&c| *c == 0)
-            .cloned()
-            .collect();
+        let filtered: Vec<u8> = valid_buf.iter().skip_while(|&c| *c == 0).cloned().collect();
         Ok(filtered)
     }
 }
 
+#[cfg(not(target_os = "linux"))]
+impl Ax25RawSocket {
+    /// Create a new socket for sending and receiving raw AX.25 frames. This requires root or CAP_NET_ADMIN.
+    pub fn new() -> io::Result<Ax25RawSocket> {
+        Err(Error::new(ErrorKind::NotFound))
+    }
+
+    /// Close an open AX.25 socket.
+    pub fn close(&mut self) -> io::Result<()> {
+        Err(Error::new(ErrorKind::NotFound))
+    }
+
+    /// Find all AX.25 interfaces on the system
+    pub fn list_ax25_interfaces(&self) -> io::Result<Vec<NetDev>> {
+        Ok(Vec::new())
+    }
+
+    /// Send a frame to a particular interface, specified by its index
+    pub fn send_frame(&self, frame: &[u8], ifindex: i32) -> io::Result<()> {
+        Err(Error::new(ErrorKind::NotConnected))
+    }
+
+    /// Block to receive an incoming AX.25 frame from any interface
+    pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
+        Err(Error::new(ErrorKind::NotConnected))
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn get_ax25_netdev(name: &str, fd: i32) -> Option<NetDev> {
     let mut req = ifreq::default();
     let if_name = name.to_owned();
