@@ -1,13 +1,10 @@
-use std::fs::File;
-use std::io::prelude::*;
-use std::io::BufReader;
 use std::io::{self, Error};
-use std::mem;
-
-use libc::{c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, socket, socklen_t, SOCK_RAW};
+use libc::{c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, socket};
 
 #[cfg(target_os = "linux")]
-use libc::{sockaddr_ll, AF_AX25, AF_PACKET};
+use libc::{sockaddr_ll, socklen_t, AF_AX25, AF_PACKET, SOCK_RAW};
+#[cfg(target_os = "linux")]
+use std::mem;
 #[cfg(not(target_os = "linux"))]
 use std::io::ErrorKind;
 
@@ -46,6 +43,9 @@ impl Ax25RawSocket {
 
     /// Find all AX.25 interfaces on the system
     pub fn list_ax25_interfaces(&self) -> io::Result<Vec<NetDev>> {
+        use std::fs::File;
+        use std::io::{BufReader, BufRead};
+
         let dev_file = File::open("/proc/net/dev")?;
         let mut devices: Vec<NetDev> = Vec::new();
         let reader = BufReader::new(dev_file);
