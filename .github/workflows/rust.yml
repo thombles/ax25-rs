@@ -7,8 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Build
-      run: cargo build --features linux
+    - name: Check
+      run: cargo check --all-targets --features linux
     - name: Run tests
       run: cargo test --features linux
     - name: Clippy
@@ -18,8 +18,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v1
-    - name: Build
-      run: cargo build
+    - name: Check
+      run: cargo check --all-targets
     - name: Run tests
       run: cargo test
     - name: Clippy
