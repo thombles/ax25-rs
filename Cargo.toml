@@ -15,6 +15,9 @@ all-features = true
 [dependencies]
 libc = { version = "0.2.29", optional = true }
 
+[dev-dependencies]
+chrono = "0.4"
+
 [features]
 default = ["libc"]
 linux = ["libc"]
