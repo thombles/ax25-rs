@@ -86,10 +86,9 @@ impl Ax25RawSocket {
 #[cfg(target_os = "linux")]
 mod sys {
     use super::*;
-    use libc::{c_char, c_int, c_ulong};
     use libc::{
-        c_void, close, recvfrom, sendto, sockaddr_ll, socket, socklen_t, AF_AX25, AF_PACKET,
-        SOCK_RAW,
+        c_char, c_int, c_ulong, c_void, close, recvfrom, sendto, sockaddr_ll, socket, socklen_t,
+        AF_AX25, AF_PACKET, SOCK_RAW,
     };
     use std::fs::File;
     use std::io::{BufRead, BufReader};

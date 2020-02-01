@@ -19,8 +19,7 @@ The `frame` module is responsible for converting frames between a collection of 
 and a strongly typed data structure `Ax25Frame`.
 
 The `linux` module provides a socket that sends and receives packets of type `Vec<u8>`.
-These can be used directly with the `frame` module. If you wish to use the library
-without linux support, disable the `linux` feature.
+These can be used directly with the `frame` module.
 
 ## Example
 
