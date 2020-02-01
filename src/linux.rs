@@ -52,6 +52,7 @@ impl Ax25RawSocket {
     }
 
     /// Send a frame to a particular interface, specified by its index
+    #[allow(unused_variables)]
     pub fn send_frame(&self, frame: &[u8], ifindex: i32) -> io::Result<()> {
         #[cfg(target_os = "linux")]
         {
