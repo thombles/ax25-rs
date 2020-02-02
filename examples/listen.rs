@@ -2,34 +2,22 @@ use ax25::tnc::{TncAddress, Tnc};
 use chrono::prelude::*;
 use std::env;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {
         println!("Usage: {} <tnc-address>", args[0]);
         println!("where tnc-address is something like");
         println!("  tnc:linuxif:vk7ntk-2");
         println!("  tnc:tcpkiss:192.168.0.1:8001");
-        return;
+        std::process::exit(1);
     }
 
-    let addr = match args[1].parse::<TncAddress>() {
-        Ok(addr) => addr,
-        Err(e) => {
-            println!("{}", e);
-            return;
-        }
-    };
-
-    let tnc = match Tnc::open(&addr) {
-        Ok(tnc) => tnc,
-        Err(e) => {
-            println!("{}", e);
-            return;
-        }
-    };
+    let addr = args[1].parse::<TncAddress>()?;
+    let tnc = Tnc::open(&addr)?;
 
     while let Ok(frame) = tnc.receive_frame() {
         println!("{}", Local::now());
         println!("{}", frame);
     }
+    Ok(())
 }
