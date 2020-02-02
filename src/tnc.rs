@@ -1,8 +1,30 @@
 use std::str::FromStr;
 use std::sync::Arc;
-
+use snafu::{ensure, ResultExt, Snafu};
 use crate::frame::Ax25Frame;
 use crate::linux;
+
+#[derive(Debug, Snafu)]
+enum TncError {
+    #[snafu(display("Unable to connect to TNC: {}", source))]
+    OpenTnc { source: std::io::Error },
+    #[snafu(display("Unable to send frame: {}", source))]
+    SendFrame { source: std::io::Error },
+    #[snafu(display("Unable to receive frame: {}", source))]
+    ReceiveFrame { source: std::io::Error },
+}
+
+#[derive(Debug, Snafu, PartialEq)]
+pub enum ParseError {
+    #[snafu(display("TNC address '{}' is invalid - it should begin with 'tnc:'", string))]
+    NoTncPrefix { string: String },
+    #[snafu(display("Unknown TNC type {}", tnc_type))]
+    UnknownType { tnc_type: String },
+    #[snafu(display("TNC type '{}' expects {} parameters to follow but there are {}", tnc_type, expected, actual))]
+    WrongParameterCount { tnc_type: String, expected: usize, actual: usize },
+    #[snafu(display("Supplied port '{}' should be a number from 0 to 65535", input))]
+    InvalidPort { input: String, source: std::num::ParseIntError }
+}
 
 #[derive(PartialEq, Debug)]
 pub struct TcpKissConfig {
@@ -45,43 +67,32 @@ impl TncAddress {
 }
 
 impl FromStr for TncAddress {
-    type Err = (); // TODO errors that are useful to the end user
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ensure!(s.starts_with("tnc:"), NoTncPrefix { string: s.to_string() });
         let components: Vec<&str> = s.split(':').collect();
-        if components.len() < 2 {
-            return Err(());
-        }
-        if components[0] != "tnc" {
-            return Err(());
-        }
+        let len = components.len();
         Ok(match components[1] {
             "tcpkiss" => {
-                if components.len() != 4 {
-                    return Err(());
-                }
+                ensure!(len == 4, WrongParameterCount { tnc_type: components[1], expected: 2usize, actual: len - 2 });
                 TncAddress {
                     config: ConnectConfig::TcpKiss(TcpKissConfig {
                         host: components[2].to_string(),
-                        port: match components[3].parse() {
-                            Ok(port) => port,
-                            _ => return Err(()),
-                        },
+                        port: components[3].parse().context(InvalidPort { input: components[3].to_string() })?,
                     }),
                 }
             }
             "linuxif" => {
-                if components.len() != 3 {
-                    return Err(());
-                }
+                ensure!(len == 3, WrongParameterCount { tnc_type: components[1], expected: 1usize, actual: len - 2 });
                 TncAddress {
                     config: ConnectConfig::LinuxIf(LinuxIfConfig {
                         ifname: components[2].to_string(),
                     }),
                 }
             }
-            _ => {
-                return Err(());
+            unknown => {
+                UnknownType { tnc_type: unknown.to_string() }.fail()?
             }
         })
     }
@@ -100,7 +111,7 @@ pub struct Tnc {
 
 impl Tnc {
     pub fn open_tnc(address: &TncAddress) -> Result<Self, ()> {
-        // Try each known implementation in turn to see if it likes our address
+        // match on the config type and call the right open()
         Err(())
     }
 }
@@ -111,28 +122,17 @@ struct LinuxIfTnc {
 }
 
 impl LinuxIfTnc {
-    fn handles_address(address: &TncAddress) -> bool {
-        if let ConnectConfig::LinuxIf(_) = address.config {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn open(address: &TncAddress) -> Result<Self, ()> {
-        if let ConnectConfig::LinuxIf(config) = &address.config {
-            let socket = linux::Ax25RawSocket::new().unwrap(); // TODO merge errors
-            let ifindex = match socket.list_ax25_interfaces().unwrap().iter()
-                .find(|nd| nd.name == config.ifname) {
-                    Some(nd) => nd.ifindex,
-                    None => return Err(()),
-            };
-            return Ok(Self {
-                socket: Arc::new(socket),
-                ifindex,
-            })
-        }
-        Err(())
+    fn open(config: &LinuxIfConfig) -> Result<Self, ()> {
+        let socket = linux::Ax25RawSocket::new().unwrap(); // TODO merge errors
+        let ifindex = match socket.list_ax25_interfaces().unwrap().iter()
+            .find(|nd| nd.name == config.ifname) {
+                Some(nd) => nd.ifindex,
+                None => return Err(()),
+        };
+        Ok(Self {
+            socket: Arc::new(socket),
+            ifindex,
+        })
     }
 }
 
@@ -178,15 +178,45 @@ mod test {
                 })
             })
         );
-        assert_eq!("fish".parse::<TncAddress>(), Err(()));
-        assert_eq!("tnc:".parse::<TncAddress>(), Err(()));
-        assert_eq!("tnc:tcpkiss".parse::<TncAddress>(), Err(()));
-        assert_eq!("tnc:tcpkiss:".parse::<TncAddress>(), Err(()));
-        assert_eq!("tnc:tcpkiss:a:b:c".parse::<TncAddress>(), Err(()));
-        assert_eq!("tnc:tcpkiss:192.168.0.1".parse::<TncAddress>(), Err(()));
-        assert_eq!(
-            "tnc:tcpkiss:192.168.0.1:hello".parse::<TncAddress>(),
-            Err(())
-        );
+        assert!(match "fish".parse::<TncAddress>() {
+            Err(ParseError::NoTncPrefix { .. }) => true,
+            _ => false,
+        });
+        assert!(match "tnc:".parse::<TncAddress>() {
+            Err(ParseError::UnknownType { tnc_type }) => tnc_type == "",
+            _ => false,
+        });
+        assert!(match "tnc:fish".parse::<TncAddress>() {
+            Err(ParseError::UnknownType { tnc_type }) => tnc_type == "fish",
+            _ => false,
+        });
+        assert!(match "tnc:tcpkiss".parse::<TncAddress>() {
+            Err(ParseError::WrongParameterCount { tnc_type, expected, actual }) => {
+                tnc_type == "tcpkiss" && expected == 2 && actual == 0
+            },
+            _ => false,
+        });
+        assert!(match "tnc:tcpkiss:".parse::<TncAddress>() {
+            Err(ParseError::WrongParameterCount { tnc_type, expected, actual }) => {
+                tnc_type == "tcpkiss" && expected == 2 && actual == 1
+            },
+            _ => false,
+        });
+        assert!(match "tnc:tcpkiss:a:b:c".parse::<TncAddress>() {
+            Err(ParseError::WrongParameterCount { tnc_type, expected, actual }) => {
+                tnc_type == "tcpkiss" && expected == 2 && actual == 3
+            },
+            _ => false,
+        });
+        assert!(match "tnc:tcpkiss:192.168.0.1".parse::<TncAddress>() {
+            Err(ParseError::WrongParameterCount { tnc_type, expected, actual }) => {
+                tnc_type == "tcpkiss" && expected == 2 && actual == 1
+            },
+            _ => false,
+        });
+        assert!(match "tnc:tcpkiss:192.168.0.1:hello".parse::<TncAddress>() {
+            Err(ParseError::InvalidPort { input, .. }) => input == "hello",
+            _ => false,
+        });
     }
 }

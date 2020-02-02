@@ -14,6 +14,7 @@ all-features = true
 
 [dependencies]
 libc = "0.2"
+snafu = "0.6"
 
 [dev-dependencies]
 chrono = "0.4"
