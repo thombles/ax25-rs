@@ -10,3 +10,5 @@ pub mod frame;
 pub mod linux;
 
 pub mod kiss;
+
+pub mod tnc;
