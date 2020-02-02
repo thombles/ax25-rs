@@ -49,10 +49,10 @@ pub enum ParseError {
 /// or indirectly by parsing a string into a `TncAddress`.
 #[derive(PartialEq, Debug)]
 pub struct TcpKissConfig {
-    // Use a String to accept domain names. Even for IP addresses we will typically
-    // receive this in a textual format from a parameter or config file.
-    host: String,
-    port: u16,
+    /// Hostname or IP address of the computer with the TNC
+    pub host: String,
+    /// Port number
+    pub port: u16,
 }
 
 /// Configuration details for a TNC attached as a Linux network interface using
@@ -60,7 +60,8 @@ pub struct TcpKissConfig {
 /// a string into a `TncAddress`.
 #[derive(PartialEq, Debug)]
 pub struct LinuxIfConfig {
-    callsign: String, // e.g. "VK7NTK-2"
+    /// The hardware address associated with the interface, e.g. "VK7NTK-2"
+    pub callsign: String,
 }
 
 #[derive(PartialEq, Debug)]
