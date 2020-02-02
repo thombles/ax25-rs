@@ -5,6 +5,7 @@ use snafu::{ensure, ResultExt, Snafu};
 use std::str::FromStr;
 use std::sync::Arc;
 
+/// Errors that can occur when interacting with a `Tnc`.
 #[derive(Debug, Snafu)]
 pub enum TncError {
     #[snafu(display("Unable to connect to TNC: {}", source))]
@@ -19,6 +20,7 @@ pub enum TncError {
     ConfigFailed { source: std::io::Error },
 }
 
+/// Errors that can occur when parsing a `TncAddress` from a string.
 #[derive(Debug, Snafu, PartialEq)]
 pub enum ParseError {
     #[snafu(display("TNC address '{}' is invalid - it should begin with 'tnc:'", string))]
@@ -43,6 +45,8 @@ pub enum ParseError {
     },
 }
 
+/// Configuration details for a TCP KISS TNC. This structure can be created directly
+/// or indirectly by parsing a string into a `TncAddress`.
 #[derive(PartialEq, Debug)]
 pub struct TcpKissConfig {
     // Use a String to accept domain names. Even for IP addresses we will typically
@@ -51,6 +55,9 @@ pub struct TcpKissConfig {
     port: u16,
 }
 
+/// Configuration details for a TNC attached as a Linux network interface using
+/// `kissattach`. This structure can be created directly or indirectly by parsing
+/// a string into a `TncAddress`.
 #[derive(PartialEq, Debug)]
 pub struct LinuxIfConfig {
     callsign: String, // e.g. "VK7NTK-2"
@@ -62,6 +69,7 @@ pub(crate) enum ConnectConfig {
     LinuxIf(LinuxIfConfig),
 }
 
+/// A parsed TNC address that can be used to open a `Tnc`.
 #[derive(PartialEq, Debug)]
 pub struct TncAddress {
     pub(crate) config: ConnectConfig,
@@ -143,11 +151,13 @@ trait TncImpl: Send + Sync {
     fn clone(&self) -> Box<dyn TncImpl>;
 }
 
+/// A local or remote TNC attached to a radio, which can send and receive frames.
 pub struct Tnc {
     imp: Box<dyn TncImpl>,
 }
 
 impl Tnc {
+    /// Attempt to obtain a `Tnc` connection using the provided address.
     pub fn open(address: &TncAddress) -> Result<Self, TncError> {
         let imp: Box<dyn TncImpl> = match &address.config {
             ConnectConfig::TcpKiss(config) => Box::new(TcpKissTnc::open(&config)?),
@@ -156,10 +166,14 @@ impl Tnc {
         Ok(Self { imp })
     }
 
+    /// Transmit a frame on the radio. Transmission is not guaranteed even if a
+    /// `Ok` result is returned.
     pub fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError> {
         self.imp.send_frame(frame)
     }
 
+    /// Block to receive a frame from the radio. If you want to do this on
+    /// a separate thread from sending, clone the `Tnc`.
     pub fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         self.imp.receive_frame()
     }

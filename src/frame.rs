@@ -2,6 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
 
+/// Errors when parsing a callsign-SSID into an `Address`
 #[derive(Debug, Snafu)]
 pub enum AddressParseError {
     #[snafu(display("Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"))]
@@ -12,6 +13,7 @@ pub enum AddressParseError {
     SsidOutOfRange,
 }
 
+/// Errors when parsing a byte buffer into an `Ax25Frame`
 #[derive(Debug, Snafu)]
 pub enum FrameParseError {
     #[snafu(display("Supplied frame only contains null bytes"))]
@@ -36,7 +38,7 @@ pub enum FrameParseError {
     WrongSizeFrmrInfo,
 }
 
-/// Human-readable protocol identifiers. These are mostly from the AX.25 2.2 spec which has far more examples than 2.0.
+/// Human-readable protocol identifiers, mostly from the AX.25 2.2 spec.
 #[derive(Debug, PartialEq)]
 pub enum ProtocolIdentifier {
     Layer3Impl,
@@ -384,20 +386,25 @@ impl FromStr for Address {
 /// A single hop in the frame's route
 #[derive(Debug)]
 pub struct RouteEntry {
+    /// Callsign-SSID of a repeater to use for source routing.
     pub repeater: Address,
+    /// A flag that is set to true when it passes through the nominated repeater.
     pub has_repeated: bool,
 }
 
 /// A strongly-typed representation of a single AX.25 frame.
 #[derive(Debug)]
 pub struct Ax25Frame {
+    /// Sending station
     pub source: Address,
+    /// Destination station
     pub destination: Address,
     /// The route the frame has taken/will take according to repeater entries in the address field
     pub route: Vec<RouteEntry>,
     /// AX.25 2.0-compliant stations will indicate in every frame whether it is a command
     /// or a response, as part of the address field.
     pub command_or_response: Option<CommandResponse>,
+    /// Various content depending on the packet type
     pub content: FrameContent,
 }
 

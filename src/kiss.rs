@@ -10,7 +10,7 @@ const FESC: u8 = 0xDB;
 const TFEND: u8 = 0xDC;
 const TFESC: u8 = 0xDD;
 
-pub struct TcpKissInterface {
+pub(crate) struct TcpKissInterface {
     // Interior mutability is desirable so that we can clone the TNC and have
     // different threads sending and receiving concurrently.
     tx_stream: Mutex<TcpStream>,
@@ -19,7 +19,7 @@ pub struct TcpKissInterface {
 }
 
 impl TcpKissInterface {
-    pub fn new<A: ToSocketAddrs>(addr: A) -> io::Result<TcpKissInterface> {
+    pub(crate) fn new<A: ToSocketAddrs>(addr: A) -> io::Result<TcpKissInterface> {
         let tx_stream = TcpStream::connect(addr)?;
         let rx_stream = tx_stream.try_clone()?;
         Ok(TcpKissInterface {
@@ -29,7 +29,7 @@ impl TcpKissInterface {
         })
     }
 
-    pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
+    pub(crate) fn receive_frame(&self) -> io::Result<Vec<u8>> {
         loop {
             {
                 let mut buffer = self.buffer.lock().unwrap();
@@ -49,7 +49,7 @@ impl TcpKissInterface {
         }
     }
 
-    pub fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
+    pub(crate) fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
         let mut tx_stream = self.tx_stream.lock().unwrap();
         // 0x00 is the KISS command byte, which is two nybbles
         // port = 0
