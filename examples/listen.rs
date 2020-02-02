@@ -7,7 +7,7 @@ fn main() {
     if args.len() != 2 {
         println!("Usage: {} <tnc-address>", args[0]);
         println!("where tnc-address is something like");
-        println!("  tnc:linuxif:ax0");
+        println!("  tnc:linuxif:vk7ntk-2");
         println!("  tnc:tcpkiss:192.168.0.1:8001");
         return;
     }
