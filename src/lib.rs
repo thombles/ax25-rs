@@ -11,7 +11,7 @@
 //! 1. Generate or ask the user to supply an address string. This takes the form:  
 //!    `tnc:tcpkiss:192.168.0.1:8001` or  
 //!    `tnc:linuxif:vk7ntk-2`
-//! 2. Parse this to an address: `let addr = string.parse::<TncAddress>?;`
+//! 2. Parse this to an address: `let addr = string.parse::<TncAddress>()?;`
 //! 3. Attempt to open the TNC: `let tnc = Tnc::open(&addr)?;`
 //! 4. Use `send_frame()` and `receive_frame()` to communicate on the radio.
 //! 5. The `Tnc` can be cloned for multithreaded use.

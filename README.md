@@ -4,70 +4,76 @@
     <img src="https://img.shields.io/crates/v/ax25.svg" alt="crates.io">
 </a>
 
-This rust library provides AX.25 frame encoding and decoding and offers support for
-sending and receiving data from radio interfaces.
+This crate aims to provide everything you need to write cross-platform packet radio
+software in Rust.
 
-At this time native Linux AX.25 interface (ax0, ax1 etc.) are supported for sending
-and receiving single packets. AX.25 version 2.0 is supported. Any application that
-relies on UI frames such as APRS should be well supported at this stage.
+* Encode and decode AX.25 frames (currently supporting v2.0)
+* KISS protocol
+* Connect to TNCs via multiple methods without needing to change your code
 
-73, Tom VK7NTK
+## Quick Start
 
-## Structure
+Most developers will want to focus on `tnc::TncAddress` and `tnc::Tnc`.
+1. Generate or ask the user to supply an address string. This takes the form:  
+   `tnc:tcpkiss:192.168.0.1:8001` or  
+   `tnc:linuxif:vk7ntk-2`
+2. Parse this to an address: `let addr = string.parse::<TncAddress>()?;`
+3. Attempt to open the TNC: `let tnc = Tnc::open(&addr)?;`
+4. Use `send_frame()` and `receive_frame()` to communicate on the radio.
+5. The `Tnc` can be cloned for multithreaded use.
 
-The `frame` module is responsible for converting frames between a collection of bytes
-and a strongly typed data structure `Ax25Frame`.
-
-The `linux` module provides a socket that sends and receives packets of type `Vec<u8>`.
-These can be used directly with the `frame` module.
+If your application requires encoding/decoding AX.25 data directly, see the `frame` module.
 
 ## Example
 
-This is a basic complete program that will transmit a single hardcoded message on
-all active AX.25 interfaces. (Various error handling omitted.)
+This following is one of the included example programs, `listen.rs`. It is a poor
+imitation of `axlisten`.
 
-    extern crate ax25;
+```rust
+use ax25::tnc::{Tnc, TncAddress};
+use chrono::prelude::*;
+use std::env;
 
-    use ax25::frame::{Ax25Frame, Address, UnnumberedInformation,
-        FrameContent, CommandResponse, ProtocolIdentifier};
-    use ax25::linux::{Ax25RawSocket};
-    use std::str::FromStr;
-
-    fn main() {
-        // Prepare a frame
-        let sender: Address = Address::from_str("VK7NTK-4").unwrap();
-        let dest: Address = Address::from_str("VK7NTK-5").unwrap();
-        let frame = Ax25Frame {
-            source: sender,
-            destination: dest,
-            route: Vec::new(),
-            command_or_response: Some(CommandResponse::Command),
-            content: FrameContent::UnnumberedInformation(UnnumberedInformation {
-                pid: ProtocolIdentifier::None,
-                info: "This is a test message".to_owned().into_bytes(),
-                poll_or_final: false
-            })
-        };
-
-        // Create a raw socket and send the frame. This requires root.
-        let mut socket = Ax25RawSocket::new().unwrap();
-        for iface in socket.list_ax25_interfaces().unwrap() {
-            let _ = socket.send_frame(&frame.to_bytes(), iface.ifindex);
-        }
-        let _ = socket.close();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("Usage: {} <tnc-address>", args[0]);
+        println!("where tnc-address is something like");
+        println!("  tnc:linuxif:vk7ntk-2");
+        println!("  tnc:tcpkiss:192.168.0.1:8001");
+        std::process::exit(1);
     }
+
+    let addr = args[1].parse::<TncAddress>()?;
+    let tnc = Tnc::open(&addr)?;
+
+    while let Ok(frame) = tnc.receive_frame() {
+        println!("{}", Local::now());
+        println!("{}", frame);
+    }
+    Ok(())
+}
+```
+
+It produces output like the following. Note that it must be run with `sudo` when
+using the Linux interface.
+
+```
+$ sudo ./target/debug/examples/listen tnc:linuxif:vk7ntk-2
+2020-02-02 21:51:11.017220715 +11:00
+Source		VK7NTK-1
+Destination	IDENT
+Data		"hello this is a test"
+```
+
+The above is the `Display` implementation for `Ax25Frame` - full protocol information
+is available through its fields which are not printed here.
 
 ## Roadmap
 
-Planned features in the short term:
+Planned features:
 
-* Support for KISS TNCs and Windows/Mac - both serial-connected and TCP like Dire Wolf
-* More ergonomic interface that abstracts over different types of interfaces and allows
-  non-blocking sending and receiving.
-
-Nice-to-haves (contributions welcome!):
-
-* APRS content encoding/decoding
-* TCP/IP content encoding/decoding
-* AX.25 v2.2 support (as of 19 Aug 2017 the spec document is still being clarified)
-* State machine for doing AX.25 connections from userspace
+* Support for serial KISS TNCs (physical, TNC-Pi, Dire Wolf pseudo-tty)
+* Paclen management
+* More convenient send/receive interfaces for messing around with UI frames
+* Direct use of linux axports interfaces without `kissattach`
