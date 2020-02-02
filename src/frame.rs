@@ -270,7 +270,7 @@ impl FrameContent {
 }
 
 /// A source or destination of an AX.25 frame, combining a callsign with an SSID.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Address {
     // An alphanumeric ASCII callsign of maximum length 6, e.g. "VK7NTK"
     pub callsign: String,

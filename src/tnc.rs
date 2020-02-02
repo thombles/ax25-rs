@@ -137,9 +137,10 @@ impl FromStr for TncAddress {
     }
 }
 
-trait TncImpl {
+trait TncImpl: Send + Sync {
     fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError>;
     fn receive_frame(&self) -> Result<Ax25Frame, TncError>;
+    fn clone(&self) -> Box<dyn TncImpl>;
 }
 
 pub struct Tnc {
@@ -161,6 +162,14 @@ impl Tnc {
 
     pub fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         self.imp.receive_frame()
+    }
+}
+
+impl Clone for Tnc {
+    fn clone(&self) -> Self {
+        Tnc {
+            imp: self.imp.clone()
+        }
     }
 }
 
@@ -206,6 +215,13 @@ impl TncImpl for LinuxIfTnc {
             }
         }
     }
+
+    fn clone(&self) -> Box<dyn TncImpl> {
+        Box::new(LinuxIfTnc {
+            socket: self.socket.clone(),
+            ifindex: self.ifindex
+        })
+    }
 }
 
 struct TcpKissTnc {
@@ -235,6 +251,12 @@ impl TncImpl for TcpKissTnc {
                 return Ok(parsed);
             }
         }
+    }
+
+    fn clone(&self) -> Box<dyn TncImpl> {
+        Box::new(TcpKissTnc {
+            iface: self.iface.clone()
+        })
     }
 }
 

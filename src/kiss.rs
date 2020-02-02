@@ -13,22 +13,25 @@ const TFESC: u8 = 0xDD;
 pub struct TcpKissInterface {
     // Interior mutability is desirable so that we can clone the TNC and have
     // different threads sending and receiving concurrently.
-    stream: Mutex<TcpStream>,
+    tx_stream: Mutex<TcpStream>,
+    rx_stream: Mutex<TcpStream>,
     buffer: Mutex<Vec<u8>>,
 }
 
 impl TcpKissInterface {
     pub fn new<A: ToSocketAddrs>(addr: A) -> io::Result<TcpKissInterface> {
-        let stream = TcpStream::connect(addr)?;
+        let tx_stream = TcpStream::connect(addr)?;
+        let rx_stream = tx_stream.try_clone()?;
         Ok(TcpKissInterface {
-            stream: Mutex::new(stream),
+            tx_stream: Mutex::new(tx_stream),
+            rx_stream: Mutex::new(rx_stream),
             buffer: Mutex::new(Vec::new()),
         })
     }
 
     pub fn close(&self) -> io::Result<()> {
-        let stream = self.stream.lock().unwrap();
-        stream.shutdown(Shutdown::Both)
+        let tx_stream = self.tx_stream.lock().unwrap();
+        tx_stream.shutdown(Shutdown::Both)
     }
 
     pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
@@ -41,8 +44,8 @@ impl TcpKissInterface {
             }
             let mut buf = vec![0u8; 1024];
             let n_bytes = {
-                let mut stream = self.stream.lock().unwrap();
-                stream.read(&mut buf)?
+                let mut rx_stream = self.rx_stream.lock().unwrap();
+                rx_stream.read(&mut buf)?
             };
             {
                 let mut buffer = self.buffer.lock().unwrap();
@@ -52,14 +55,14 @@ impl TcpKissInterface {
     }
 
     pub fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
-        let mut stream = self.stream.lock().unwrap();
+        let mut tx_stream = self.tx_stream.lock().unwrap();
         // 0x00 is the KISS command byte, which is two nybbles
         // port = 0
         // command = 0 (all following bytes are a data frame to transmit)
-        stream.write_all(&[FEND, 0x00])?;
-        stream.write_all(frame)?;
-        stream.write_all(&[FEND])?;
-        stream.flush()?;
+        tx_stream.write_all(&[FEND, 0x00])?;
+        tx_stream.write_all(frame)?;
+        tx_stream.write_all(&[FEND])?;
+        tx_stream.flush()?;
         Ok(())
     }
 }
