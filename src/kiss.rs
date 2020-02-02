@@ -9,6 +9,10 @@ const FESC: u8 = 0xDB;
 const TFEND: u8 = 0xDC;
 const TFESC: u8 = 0xDD;
 
+struct KissTnc {
+    
+}
+
 pub struct TcpKissInterface {
     stream: TcpStream,
     buffer: Vec<u8>,

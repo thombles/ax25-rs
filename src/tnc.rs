@@ -1,4 +1,8 @@
 use std::str::FromStr;
+use std::sync::Arc;
+
+use crate::frame::Ax25Frame;
+use crate::linux;
 
 #[derive(PartialEq, Debug)]
 pub struct TcpKissConfig {
@@ -14,14 +18,14 @@ pub struct LinuxIfConfig {
 }
 
 #[derive(PartialEq, Debug)]
-enum ConnectConfig {
+pub(crate) enum ConnectConfig {
     TcpKiss(TcpKissConfig),
     LinuxIf(LinuxIfConfig),
 }
 
 #[derive(PartialEq, Debug)]
 pub struct TncAddress {
-    config: ConnectConfig,
+    pub(crate) config: ConnectConfig,
 }
 
 impl TncAddress {
@@ -80,6 +84,74 @@ impl FromStr for TncAddress {
                 return Err(());
             }
         })
+    }
+}
+
+trait TncImpl {
+    fn send_frame(&self, frame: &Ax25Frame) -> Result<(), ()>;
+    fn receive_frame(&self) -> Result<Ax25Frame, ()>;
+    fn paclen(&self) -> u8;
+    fn set_paclen(&self, len: u8) -> Result<(), ()>;
+}
+
+pub struct Tnc {
+    imp: Box<dyn TncImpl>,
+}
+
+impl Tnc {
+    pub fn open_tnc(address: &TncAddress) -> Result<Self, ()> {
+        // Try each known implementation in turn to see if it likes our address
+        Err(())
+    }
+}
+
+struct LinuxIfTnc {
+    socket: Arc<linux::Ax25RawSocket>,
+    ifindex: i32,
+}
+
+impl LinuxIfTnc {
+    fn handles_address(address: &TncAddress) -> bool {
+        if let ConnectConfig::LinuxIf(_) = address.config {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn open(address: &TncAddress) -> Result<Self, ()> {
+        if let ConnectConfig::LinuxIf(config) = &address.config {
+            let socket = linux::Ax25RawSocket::new().unwrap(); // TODO merge errors
+            let ifindex = match socket.list_ax25_interfaces().unwrap().iter()
+                .find(|nd| nd.name == config.ifname) {
+                    Some(nd) => nd.ifindex,
+                    None => return Err(()),
+            };
+            return Ok(Self {
+                socket: Arc::new(socket),
+                ifindex,
+            })
+        }
+        Err(())
+    }
+}
+
+impl TncImpl for LinuxIfTnc {
+    fn send_frame(&self, frame: &Ax25Frame) -> Result<(), ()> {
+        self.socket.send_frame(&frame.to_bytes(), self.ifindex).unwrap();
+        Ok(())
+    }
+
+    fn receive_frame(&self) -> Result<Ax25Frame, ()> {
+        Err(())
+    }
+
+    fn paclen(&self) -> u8 {
+        255
+    }
+
+    fn set_paclen(&self, len: u8) -> Result<(), ()> {
+        Ok(())
     }
 }
 

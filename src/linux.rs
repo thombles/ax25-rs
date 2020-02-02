@@ -27,18 +27,6 @@ impl Ax25RawSocket {
         }
     }
 
-    /// Close an open AX.25 socket.
-    pub fn close(&mut self) -> io::Result<()> {
-        #[cfg(target_os = "linux")]
-        {
-            sys::socket_close(self)
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            Err(Error::new(ErrorKind::NotFound, "only supported on linux"))
-        }
-    }
-
     /// Find all AX.25 interfaces on the system
     pub fn list_ax25_interfaces(&self) -> io::Result<Vec<NetDev>> {
         #[cfg(target_os = "linux")]
@@ -79,6 +67,15 @@ impl Ax25RawSocket {
                 ErrorKind::NotConnected,
                 "only supported on linux",
             ))
+        }
+    }
+}
+
+impl Drop for Ax25RawSocket {
+    fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        {
+            let _ = sys::socket_close(self);
         }
     }
 }
