@@ -698,7 +698,7 @@ fn test_round_trips() {
                 // Should be identical when re-encoded
                 assert_eq!(frame_data_fixed, &parsed.to_bytes()[..])
             }
-            Err(e) => println!("Could not parse! {}", e),
+            Err(e) => assert!(false, "Could not parse! {}", e),
         };
     }
 }
