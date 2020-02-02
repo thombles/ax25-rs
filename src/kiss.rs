@@ -3,53 +3,63 @@ use std::io::prelude::*;
 use std::net::Shutdown;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
+use std::sync::Mutex;
 
 const FEND: u8 = 0xC0;
 const FESC: u8 = 0xDB;
 const TFEND: u8 = 0xDC;
 const TFESC: u8 = 0xDD;
 
-struct KissTnc {
-    
-}
-
 pub struct TcpKissInterface {
-    stream: TcpStream,
-    buffer: Vec<u8>,
+    // Interior mutability is desirable so that we can clone the TNC and have
+    // different threads sending and receiving concurrently.
+    stream: Mutex<TcpStream>,
+    buffer: Mutex<Vec<u8>>,
 }
 
 impl TcpKissInterface {
     pub fn new<A: ToSocketAddrs>(addr: A) -> io::Result<TcpKissInterface> {
         let stream = TcpStream::connect(addr)?;
         Ok(TcpKissInterface {
-            stream,
-            buffer: Vec::new(),
+            stream: Mutex::new(stream),
+            buffer: Mutex::new(Vec::new()),
         })
     }
 
-    pub fn close(&mut self) -> io::Result<()> {
-        self.stream.shutdown(Shutdown::Both)
+    pub fn close(&self) -> io::Result<()> {
+        let stream = self.stream.lock().unwrap();
+        stream.shutdown(Shutdown::Both)
     }
 
-    pub fn receive_frame(&mut self) -> io::Result<Vec<u8>> {
+    pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
         loop {
-            if let Some(frame) = make_frame_from_buffer(&mut self.buffer) {
-                return Ok(frame);
+            {
+                let mut buffer = self.buffer.lock().unwrap();
+                if let Some(frame) = make_frame_from_buffer(&mut buffer) {
+                    return Ok(frame);
+                }
             }
             let mut buf = vec![0u8; 1024];
-            let n_bytes = self.stream.read(&mut buf)?;
-            self.buffer.extend(buf.iter().take(n_bytes));
+            let n_bytes = {
+                let mut stream = self.stream.lock().unwrap();
+                stream.read(&mut buf)?
+            };
+            {
+                let mut buffer = self.buffer.lock().unwrap();
+                buffer.extend(buf.iter().take(n_bytes));
+            }
         }
     }
 
-    pub fn send_frame(&mut self, frame: &[u8]) -> io::Result<()> {
+    pub fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
+        let mut stream = self.stream.lock().unwrap();
         // 0x00 is the KISS command byte, which is two nybbles
         // port = 0
         // command = 0 (all following bytes are a data frame to transmit)
-        self.stream.write_all(&[FEND, 0x00])?;
-        self.stream.write_all(frame)?;
-        self.stream.write_all(&[FEND])?;
-        self.stream.flush()?;
+        stream.write_all(&[FEND, 0x00])?;
+        stream.write_all(frame)?;
+        stream.write_all(&[FEND])?;
+        stream.flush()?;
         Ok(())
     }
 }

@@ -1,26 +1,35 @@
-use ax25::frame::Ax25Frame;
-use ax25::linux::Ax25RawSocket;
-use ax25::tnc::TncAddress;
+use ax25::tnc::{TncAddress, Tnc};
 use chrono::prelude::*;
+use std::env;
 
 fn main() {
-    // Let's test this out...
-    match "tnc:tcpkiss:192.168.0.1:4000".parse::<TncAddress>() {
-        Ok(_) => println!("Parsed first address"),
-        Err(e) => println!("Failed to parse first address: {}", e),
-    };
-    match "tnc:tcpkiss:192.168.0.1:4000:eleven".parse::<TncAddress>() {
-        Ok(_) => println!("Parsed second address"),
-        Err(e) => println!("Failed to parse second address: {}", e),
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("Usage: {} <tnc-address>", args[0]);
+        println!("where tnc-address is something like");
+        println!("  tnc:linuxif:ax0");
+        println!("  tnc:tcpkiss:192.168.0.1:8001");
+        return;
+    }
+
+    let addr = match args[1].parse::<TncAddress>() {
+        Ok(addr) => addr,
+        Err(e) => {
+            println!("{}", e);
+            return;
+        }
     };
 
-    // For the moment default to the linux interface
-    let socket = Ax25RawSocket::new().unwrap();
-    while let Ok(frame) = socket.receive_frame() {
+    let tnc = match Tnc::open(&addr) {
+        Ok(tnc) => tnc,
+        Err(e) => {
+            println!("{}", e);
+            return;
+        }
+    };
+
+    while let Ok(frame) = tnc.receive_frame() {
         println!("{}", Local::now());
-        match Ax25Frame::from_bytes(&frame) {
-            Ok(parsed) => println!("{}", parsed),
-            Err(e) => println!("Could not parse frame: {}", e),
-        };
+        println!("{}", frame);
     }
 }
