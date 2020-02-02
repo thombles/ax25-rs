@@ -3,7 +3,7 @@ use std::io::ErrorKind;
 use std::io::{self, Error};
 
 /// An active AX.25 network interface, e.g. "ax0"
-pub struct NetDev {
+pub(crate) struct NetDev {
     pub name: String,
     pub ifindex: i32,
 }

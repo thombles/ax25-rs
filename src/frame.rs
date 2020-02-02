@@ -1,6 +1,40 @@
-use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
+use snafu::{ensure, OptionExt, ResultExt, Snafu};
+
+#[derive(Debug, Snafu)]
+pub enum AddressParseError {
+    #[snafu(display("Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"))]
+    InvalidFormat,
+    #[snafu(display("Could not parse SSID: {}", source))]
+    InvalidSsid { source: std::num::ParseIntError },
+    #[snafu(display("SSID must be between 0 and 15"))]
+    SsidOutOfRange,
+}
+
+#[derive(Debug, Snafu)]
+pub enum FrameParseError {
+    #[snafu(display("Supplied frame only contains null bytes"))]
+    OnlyNullBytes,
+    #[snafu(display("Unable to locate end of address field"))]
+    NoEndToAddressField,
+    #[snafu(display("Address field too short: start {} end {}", start, end))]
+    AddressFieldTooShort { start: usize, end: usize},
+    #[snafu(display("Frame is too short: len {}", len))]
+    FrameTooShort { len: usize },
+    #[snafu(display("Callsign is not valid UTF-8"))]
+    AddressInvalidUtf8 { source: std::string::FromUtf8Error },
+    #[snafu(display("Content section of frame is empty"))]
+    ContentZeroLength,
+    #[snafu(display("Protocol ID field is missing"))]
+    MissingPidField,
+    #[snafu(display("Unrecognised U field type"))]
+    UnrecognisedSFieldType,
+    #[snafu(display("Unrecognised S field type"))]
+    UnrecognisedUFieldType,
+    #[snafu(display("Wrong size for FRMR info"))]
+    WrongSizeFrmrInfo,
+}
 
 /// Human-readable protocol identifiers. These are mostly from the AX.25 2.2 spec which has far more examples than 2.0.
 #[derive(Debug, PartialEq)]
@@ -321,31 +355,22 @@ impl fmt::Display for Address {
 }
 
 impl FromStr for Address {
-    type Err = Box<dyn Error>;
+    type Err = AddressParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 2 {
-            return Err("Address must be of the form CALL-#".into());
-        }
+        ensure!(parts.len() == 2, InvalidFormat);
 
         let callsign = parts[0].to_uppercase();
-        if callsign.is_empty() || callsign.len() > 6 {
-            return Err("Callsign must be 1-6 letters/numbers".into());
-        }
+        ensure!(!callsign.is_empty() && callsign.len() <= 6, InvalidFormat);
         for c in callsign.chars() {
             if !c.is_alphanumeric() {
-                return Err(
-                    "Callsign must be alphanumeric only (space padding is handled internally)"
-                        .into(),
-                );
+                InvalidFormat.fail()?;
             }
         }
 
-        let ssid = parts[1].parse::<u8>()?;
-        if ssid > 15 {
-            return Err("SSID must be from 0 to 15".into());
-        }
+        let ssid = parts[1].parse::<u8>().context(InvalidSsid)?;
+        ensure!(ssid <= 15, SsidOutOfRange);
 
         // c_bit will be set on transmit
         Ok(Address {
@@ -391,26 +416,22 @@ impl Ax25Frame {
     }
 
     /// Parse raw bytes into an Ax25Frame if possible.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, Box<dyn Error>> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, FrameParseError> {
         // Skip over leading null bytes
         // Linux AF_PACKET has oen of these - we will strip it out in the linux module
         // but also keep the protection here
         let addr_start = bytes
             .iter()
             .position(|&c| c != 0)
-            .ok_or("Only found null bytes")?;
+            .context(OnlyNullBytes)?;
         let addr_end = bytes
             .iter()
             .position(|&c| c & 0x01 == 0x01)
-            .ok_or("Couldn't find end of address field")?;
+            .context(NoEndToAddressField)?;
         let control = addr_end + 1;
-        if addr_end - addr_start + 1 < 14 {
-            // +1 because the "terminator" is actually within the last byte
-            return Err(format!("Address field too short: {} {}", addr_start, addr_end).into());
-        }
-        if control >= bytes.len() {
-            return Err(format!("Packet is unreasonably short: {} bytes", bytes.len()).into());
-        }
+        // +1 because the "terminator" is actually within the last byte
+        ensure!(addr_end - addr_start + 1 >= 14, AddressFieldTooShort { start: addr_start, end: addr_end });
+        ensure!(control < bytes.len(), FrameTooShort { len: bytes.len() });
 
         let dest = parse_address(&bytes[addr_start..addr_start + 7])?;
         let src = parse_address(&bytes[addr_start + 7..addr_start + 14])?;
@@ -481,7 +502,7 @@ impl fmt::Display for Ax25Frame {
     }
 }
 
-fn parse_address(bytes: &[u8]) -> Result<Address, Box<dyn Error>> {
+fn parse_address(bytes: &[u8]) -> Result<Address, FrameParseError> {
     let mut dest_utf8: Vec<u8> = bytes[0..6]
         .iter()
         .rev()
@@ -490,16 +511,14 @@ fn parse_address(bytes: &[u8]) -> Result<Address, Box<dyn Error>> {
         .collect::<Vec<u8>>();
     dest_utf8.reverse();
     Ok(Address {
-        callsign: String::from_utf8(dest_utf8)?,
+        callsign: String::from_utf8(dest_utf8).context(AddressInvalidUtf8)?,
         ssid: (bytes[6] >> 1) & 0x0f,
         c_bit: bytes[6] & 0b1000_0000 > 0,
     })
 }
 
-fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
-    if bytes.len() < 2 {
-        return Err("Missing PID field".into());
-    }
+fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
+    ensure!(bytes.len() >= 2, MissingPidField);
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information(Information {
         receive_sequence: (c & 0b1110_0000) >> 5,
@@ -510,7 +529,7 @@ fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     }))
 }
 
-fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
+fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     // These all have the same general layout
     // There should be no PID or info following this control byte
     let c = bytes[0];
@@ -530,11 +549,11 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
             receive_sequence: n_r,
             poll_or_final,
         })),
-        _ => Err("Unrecognised S field type".into()),
+        _ => Err(UnrecognisedSFieldType.fail()?),
     }
 }
 
-fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
+fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     // The only moving part in control for U frames is the P/F bit
     // Two special cases to handle:
     // FRMR is followed by a 3-byte information field that must be parsed specially
@@ -560,14 +579,12 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
         })),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
-        _ => Err("Unrecognised U field type".into()),
+        _ => Err(UnrecognisedUFieldType.fail()?),
     }
 }
 
-fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
-    if bytes.len() < 2 {
-        return Err("Missing PID field".into());
-    }
+fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
+    ensure!(bytes.len() >= 2, MissingPidField);
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation(UnnumberedInformation {
         poll_or_final: bytes[0] & 0b0001_0000 > 0,
@@ -576,10 +593,10 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
     }))
 }
 
-fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
+fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
-        return Err("Wrong size for FRMR info".into());
+        return Err(WrongSizeFrmrInfo.fail()?);
     }
     Ok(FrameContent::FrameReject(FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
@@ -599,10 +616,8 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
 }
 
 /// Parse the content of the frame starting from the control field
-fn parse_content(bytes: &[u8]) -> Result<FrameContent, Box<dyn Error>> {
-    if bytes.is_empty() {
-        return Err("Zero content length".into());
-    }
+fn parse_content(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
+    ensure!(!bytes.is_empty(), ContentZeroLength);
     match bytes[0] {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
         c if c & 0x03 == 0x01 => parse_s_frame(bytes),

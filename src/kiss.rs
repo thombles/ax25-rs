@@ -29,11 +29,6 @@ impl TcpKissInterface {
         })
     }
 
-    pub fn close(&self) -> io::Result<()> {
-        let tx_stream = self.tx_stream.lock().unwrap();
-        tx_stream.shutdown(Shutdown::Both)
-    }
-
     pub fn receive_frame(&self) -> io::Result<Vec<u8>> {
         loop {
             {
@@ -64,6 +59,13 @@ impl TcpKissInterface {
         tx_stream.write_all(&[FEND])?;
         tx_stream.flush()?;
         Ok(())
+    }
+}
+
+impl Drop for TcpKissInterface {
+    fn drop(&mut self) {
+        let tx_stream = self.tx_stream.lock().unwrap();
+        let _ = tx_stream.shutdown(Shutdown::Both);
     }
 }
 
