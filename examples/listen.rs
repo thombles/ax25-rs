@@ -1,4 +1,4 @@
-use ax25::tnc::{TncAddress, Tnc};
+use ax25::tnc::{Tnc, TncAddress};
 use chrono::prelude::*;
 use std::env;
 

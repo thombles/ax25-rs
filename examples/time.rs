@@ -1,10 +1,12 @@
-use ax25::frame::{Address, Ax25Frame, CommandResponse, FrameContent, UnnumberedInformation, ProtocolIdentifier};
-use ax25::tnc::{TncAddress, Tnc};
+use ax25::frame::{
+    Address, Ax25Frame, CommandResponse, FrameContent, ProtocolIdentifier, UnnumberedInformation,
+};
+use ax25::tnc::{Tnc, TncAddress};
 use chrono::prelude::*;
 use std::env;
 use std::error::Error;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -21,15 +23,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let broadcast_dest = "TIME-0".parse::<Address>().unwrap();
     let src_1 = src.clone();
     let tnc_1 = tnc.clone();
-    thread::spawn(move || {
-        loop {
-            if transmit_time(&tnc_1, &src_1, &broadcast_dest).is_err() {
-                break;
-            }
-            thread::sleep(Duration::from_secs(60));
+    thread::spawn(move || loop {
+        if transmit_time(&tnc_1, &src_1, &broadcast_dest).is_err() {
+            break;
         }
+        thread::sleep(Duration::from_secs(60));
     });
-    
+
     // Receive on the initial thread
     while let Ok(frame) = tnc.receive_frame() {
         // If someone asks us what the time is, tell them immediately
@@ -52,8 +52,8 @@ fn transmit_time(tnc: &Tnc, src: &Address, dest: &Address) -> Result<(), Box<dyn
         content: FrameContent::UnnumberedInformation(UnnumberedInformation {
             pid: ProtocolIdentifier::None,
             info: format!("The time is: {}", Local::now()).as_bytes().to_vec(),
-            poll_or_final: false
-        })
+            poll_or_final: false,
+        }),
     };
     tnc.send_frame(&frame)?;
     Ok(())

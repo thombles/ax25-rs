@@ -183,7 +183,7 @@ impl Tnc {
 impl Clone for Tnc {
     fn clone(&self) -> Self {
         Tnc {
-            imp: self.imp.clone()
+            imp: self.imp.clone(),
         }
     }
 }
@@ -234,7 +234,7 @@ impl TncImpl for LinuxIfTnc {
     fn clone(&self) -> Box<dyn TncImpl> {
         Box::new(LinuxIfTnc {
             socket: self.socket.clone(),
-            ifindex: self.ifindex
+            ifindex: self.ifindex,
         })
     }
 }
@@ -270,7 +270,7 @@ impl TncImpl for TcpKissTnc {
 
     fn clone(&self) -> Box<dyn TncImpl> {
         Box::new(TcpKissTnc {
-            iface: self.iface.clone()
+            iface: self.iface.clone(),
         })
     }
 }

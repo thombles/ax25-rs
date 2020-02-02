@@ -1,6 +1,6 @@
+use snafu::{ensure, OptionExt, ResultExt, Snafu};
 use std::fmt;
 use std::str::FromStr;
-use snafu::{ensure, OptionExt, ResultExt, Snafu};
 
 /// Errors when parsing a callsign-SSID into an `Address`
 #[derive(Debug, Snafu)]
@@ -21,7 +21,7 @@ pub enum FrameParseError {
     #[snafu(display("Unable to locate end of address field"))]
     NoEndToAddressField,
     #[snafu(display("Address field too short: start {} end {}", start, end))]
-    AddressFieldTooShort { start: usize, end: usize},
+    AddressFieldTooShort { start: usize, end: usize },
     #[snafu(display("Frame is too short: len {}", len))]
     FrameTooShort { len: usize },
     #[snafu(display("Callsign is not valid UTF-8"))]
@@ -427,17 +427,20 @@ impl Ax25Frame {
         // Skip over leading null bytes
         // Linux AF_PACKET has oen of these - we will strip it out in the linux module
         // but also keep the protection here
-        let addr_start = bytes
-            .iter()
-            .position(|&c| c != 0)
-            .context(OnlyNullBytes)?;
+        let addr_start = bytes.iter().position(|&c| c != 0).context(OnlyNullBytes)?;
         let addr_end = bytes
             .iter()
             .position(|&c| c & 0x01 == 0x01)
             .context(NoEndToAddressField)?;
         let control = addr_end + 1;
         // +1 because the "terminator" is actually within the last byte
-        ensure!(addr_end - addr_start + 1 >= 14, AddressFieldTooShort { start: addr_start, end: addr_end });
+        ensure!(
+            addr_end - addr_start + 1 >= 14,
+            AddressFieldTooShort {
+                start: addr_start,
+                end: addr_end
+            }
+        );
         ensure!(control < bytes.len(), FrameTooShort { len: bytes.len() });
 
         let dest = parse_address(&bytes[addr_start..addr_start + 7])?;

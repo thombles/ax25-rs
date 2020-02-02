@@ -126,7 +126,11 @@ mod sys {
         Ok(devices)
     }
 
-    pub(crate) fn socket_send_frame(socket: &Ax25RawSocket, frame: &[u8], ifindex: i32) -> io::Result<()> {
+    pub(crate) fn socket_send_frame(
+        socket: &Ax25RawSocket,
+        frame: &[u8],
+        ifindex: i32,
+    ) -> io::Result<()> {
         // The Linux interface demands a single null byte prefix on the actual packet
         let mut prefixed_frame: Vec<u8> = Vec::with_capacity(frame.len() + 1);
         prefixed_frame.push(0);

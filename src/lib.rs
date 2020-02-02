@@ -31,4 +31,3 @@ mod linux;
 
 /// Interfacing with TCP KISS servers such as Dire Wolf.
 mod kiss;
-
