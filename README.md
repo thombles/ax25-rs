@@ -3,6 +3,9 @@
 <a href="https://crates.io/crates/ax25">
     <img src="https://img.shields.io/crates/v/ax25.svg" alt="crates.io">
 </a>
+<a href="https://docs.rs/ax25">
+    <img src="https://docs.rs/ax25/badge.svg" alt="docs.rs">
+</a>
 
 This crate aims to provide everything you need to write cross-platform packet radio
 software in Rust.
