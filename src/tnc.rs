@@ -224,7 +224,7 @@ impl TncImpl for LinuxIfTnc {
 
     fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         loop {
-            let bytes = self.socket.receive_frame().context(ReceiveFrame)?;
+            let bytes = self.socket.receive_frame(self.ifindex).context(ReceiveFrame)?;
             if let Ok(parsed) = Ax25Frame::from_bytes(&bytes) {
                 return Ok(parsed);
             }

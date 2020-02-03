@@ -56,10 +56,10 @@ impl Ax25RawSocket {
     }
 
     /// Block to receive an incoming AX.25 frame from any interface
-    pub(crate) fn receive_frame(&self) -> io::Result<Vec<u8>> {
+    pub(crate) fn receive_frame(&self, ifindex: i32) -> io::Result<Vec<u8>> {
         #[cfg(target_os = "linux")]
         {
-            sys::socket_receive_frame(self)
+            sys::socket_receive_frame(self, ifindex)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -162,25 +162,31 @@ mod sys {
         }
     }
 
-    pub(crate) fn socket_receive_frame(socket: &Ax25RawSocket) -> io::Result<Vec<u8>> {
+    pub(crate) fn socket_receive_frame(socket: &Ax25RawSocket, ifindex: i32) -> io::Result<Vec<u8>> {
         let mut buf: [u8; 1024] = [0; 1024];
-        // Not sure we need the address but it might come in handy someday
         let mut addr_struct: sockaddr_ll = unsafe { mem::zeroed() };
-        let len: usize;
-        unsafe {
-            let sa_ptr = &mut addr_struct as *mut libc::sockaddr_ll as *mut libc::sockaddr;
-            let mut sa_in_sz: socklen_t = mem::size_of::<sockaddr_ll>() as socklen_t;
-            len = match recvfrom(
-                socket.fd,
-                buf.as_mut_ptr() as *mut c_void,
-                buf.len(),
-                0,
-                sa_ptr,
-                &mut sa_in_sz,
-            ) {
-                -1 => return Err(Error::last_os_error()),
-                len => len as usize,
-            };
+        let mut len: usize;
+        loop {
+            unsafe {
+                let sa_ptr = &mut addr_struct as *mut libc::sockaddr_ll as *mut libc::sockaddr;
+                let mut sa_in_sz: socklen_t = mem::size_of::<sockaddr_ll>() as socklen_t;
+                len = match recvfrom(
+                    socket.fd,
+                    buf.as_mut_ptr() as *mut c_void,
+                    buf.len(),
+                    0,
+                    sa_ptr,
+                    &mut sa_in_sz,
+                ) {
+                    -1 => return Err(Error::last_os_error()),
+                    len => len as usize,
+                };
+                // We actually get packets from all interfaces when receiving this way
+                // Only report ones from the interface we're interested in
+                if addr_struct.sll_ifindex == ifindex {
+                    break;
+                }
+            }
         }
         let valid_buf = &buf[0..len];
 
