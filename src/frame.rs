@@ -362,16 +362,16 @@ impl FromStr for Address {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
         if parts.len() != 2 {
-            Err(AddressParseError::InvalidFormat)?;
+            return Err(AddressParseError::InvalidFormat);
         }
 
         let callsign = parts[0].to_uppercase();
         if callsign.is_empty() || callsign.len() > 6 {
-            Err(AddressParseError::InvalidFormat)?;
+            return Err(AddressParseError::InvalidFormat);
         }
         for c in callsign.chars() {
             if !c.is_alphanumeric() {
-                Err(AddressParseError::InvalidFormat)?;
+                return Err(AddressParseError::InvalidFormat);
             }
         }
 
@@ -379,7 +379,7 @@ impl FromStr for Address {
             .parse::<u8>()
             .map_err(|e| AddressParseError::InvalidSsid { source: e })?;
         if ssid > 15 {
-            Err(AddressParseError::SsidOutOfRange)?;
+            return Err(AddressParseError::SsidOutOfRange);
         }
 
         // c_bit will be set on transmit
@@ -446,13 +446,13 @@ impl Ax25Frame {
         let control = addr_end + 1;
         // +1 because the "terminator" is actually within the last byte
         if addr_end - addr_start + 1 < 14 {
-            Err(FrameParseError::AddressFieldTooShort {
+            return Err(FrameParseError::AddressFieldTooShort {
                 start: addr_start,
                 end: addr_end,
-            })?;
+            });
         }
         if control >= bytes.len() {
-            Err(FrameParseError::FrameTooShort { len: bytes.len() })?;
+            return Err(FrameParseError::FrameTooShort { len: bytes.len() });
         }
 
         let dest = parse_address(&bytes[addr_start..addr_start + 7])?;
@@ -542,7 +542,7 @@ fn parse_address(bytes: &[u8]) -> Result<Address, FrameParseError> {
 
 fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     if bytes.len() < 2 {
-        Err(FrameParseError::MissingPidField)?;
+        return Err(FrameParseError::MissingPidField);
     }
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information(Information {
@@ -574,7 +574,7 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
             receive_sequence: n_r,
             poll_or_final,
         })),
-        _ => Err(FrameParseError::UnrecognisedSFieldType)?,
+        _ => Err(FrameParseError::UnrecognisedSFieldType),
     }
 }
 
@@ -604,13 +604,13 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
         })),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
-        _ => Err(FrameParseError::UnrecognisedUFieldType)?,
+        _ => Err(FrameParseError::UnrecognisedUFieldType),
     }
 }
 
 fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     if bytes.len() < 2 {
-        Err(FrameParseError::MissingPidField)?;
+        return Err(FrameParseError::MissingPidField);
     }
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation(UnnumberedInformation {
@@ -623,7 +623,7 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
 fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
-        Err(FrameParseError::WrongSizeFrmrInfo)?;
+        return Err(FrameParseError::WrongSizeFrmrInfo);
     }
     Ok(FrameContent::FrameReject(FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
@@ -645,7 +645,7 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
 /// Parse the content of the frame starting from the control field
 fn parse_content(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     if bytes.is_empty() {
-        Err(FrameParseError::ContentZeroLength)?;
+        return Err(FrameParseError::ContentZeroLength);
     }
     match bytes[0] {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),

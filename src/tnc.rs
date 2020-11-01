@@ -97,20 +97,20 @@ impl FromStr for TncAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if !s.starts_with("tnc:") {
-            Err(ParseError::NoTncPrefix {
+            return Err(ParseError::NoTncPrefix {
                 string: s.to_string(),
-            })?;
+            });
         }
         let components: Vec<&str> = s.split(':').collect();
         let len = components.len();
         Ok(match components[1] {
             "tcpkiss" => {
                 if len != 4 {
-                    Err(ParseError::WrongParameterCount {
+                    return Err(ParseError::WrongParameterCount {
                         tnc_type: components[1].to_string(),
                         expected: 2usize,
                         actual: len - 2,
-                    })?;
+                    });
                 }
                 TncAddress {
                     config: ConnectConfig::TcpKiss(TcpKissConfig {
@@ -124,11 +124,11 @@ impl FromStr for TncAddress {
             }
             "linuxif" => {
                 if len != 3 {
-                    Err(ParseError::WrongParameterCount {
+                    return Err(ParseError::WrongParameterCount {
                         tnc_type: components[1].to_string(),
                         expected: 1usize,
                         actual: len - 2,
-                    })?;
+                    });
                 }
                 TncAddress {
                     config: ConnectConfig::LinuxIf(LinuxIfConfig {
@@ -136,9 +136,11 @@ impl FromStr for TncAddress {
                     }),
                 }
             }
-            unknown => Err(ParseError::UnknownType {
-                tnc_type: unknown.to_string(),
-            })?,
+            unknown => {
+                return Err(ParseError::UnknownType {
+                    tnc_type: unknown.to_string(),
+                })
+            }
         })
     }
 }
@@ -200,9 +202,11 @@ impl LinuxIfTnc {
             .find(|nd| nd.name.to_uppercase() == config.callsign.to_uppercase())
         {
             Some(nd) => nd.ifindex,
-            None => Err(TncError::InterfaceNotFound {
-                callsign: config.callsign.clone(),
-            })?,
+            None => {
+                return Err(TncError::InterfaceNotFound {
+                    callsign: config.callsign.clone(),
+                })
+            }
         };
         Ok(Self {
             socket: Arc::new(socket),
