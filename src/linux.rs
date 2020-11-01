@@ -56,6 +56,7 @@ impl Ax25RawSocket {
     }
 
     /// Block to receive an incoming AX.25 frame from any interface
+    #[allow(unused_variables)]
     pub(crate) fn receive_frame(&self, ifindex: i32) -> io::Result<Vec<u8>> {
         #[cfg(target_os = "linux")]
         {
@@ -162,7 +163,10 @@ mod sys {
         }
     }
 
-    pub(crate) fn socket_receive_frame(socket: &Ax25RawSocket, ifindex: i32) -> io::Result<Vec<u8>> {
+    pub(crate) fn socket_receive_frame(
+        socket: &Ax25RawSocket,
+        ifindex: i32,
+    ) -> io::Result<Vec<u8>> {
         let mut buf: [u8; 1024] = [0; 1024];
         let mut addr_struct: sockaddr_ll = unsafe { mem::zeroed() };
         let mut len: usize;
