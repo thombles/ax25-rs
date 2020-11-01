@@ -1,44 +1,44 @@
 use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
-use snafu::{ensure, ResultExt, Snafu};
 use std::str::FromStr;
 use std::sync::Arc;
+use thiserror::Error;
 
 /// Errors that can occur when interacting with a `Tnc`.
-#[derive(Debug, Snafu)]
+#[derive(Debug, Error)]
 pub enum TncError {
-    #[snafu(display("Unable to connect to TNC: {}", source))]
+    #[error("Unable to connect to TNC: {}", source)]
     OpenTnc { source: std::io::Error },
-    #[snafu(display("Interface with specified callsign '{}' does not exist", callsign))]
+    #[error("Interface with specified callsign '{}' does not exist", callsign)]
     InterfaceNotFound { callsign: String },
-    #[snafu(display("Unable to send frame: {}", source))]
+    #[error("Unable to send frame: {}", source)]
     SendFrame { source: std::io::Error },
-    #[snafu(display("Unable to receive frame: {}", source))]
+    #[error("Unable to receive frame: {}", source)]
     ReceiveFrame { source: std::io::Error },
-    #[snafu(display("Unable to make configuration change: {}", source))]
+    #[error("Unable to make configuration change: {}", source)]
     ConfigFailed { source: std::io::Error },
 }
 
 /// Errors that can occur when parsing a `TncAddress` from a string.
-#[derive(Debug, Snafu, PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ParseError {
-    #[snafu(display("TNC address '{}' is invalid - it should begin with 'tnc:'", string))]
+    #[error("TNC address '{}' is invalid - it should begin with 'tnc:'", string)]
     NoTncPrefix { string: String },
-    #[snafu(display("Unknown TNC type {}", tnc_type))]
+    #[error("Unknown TNC type {}", tnc_type)]
     UnknownType { tnc_type: String },
-    #[snafu(display(
+    #[error(
         "TNC type '{}' expects {} parameters to follow but there are {}",
         tnc_type,
         expected,
         actual
-    ))]
+    )]
     WrongParameterCount {
         tnc_type: String,
         expected: usize,
         actual: usize,
     },
-    #[snafu(display("Supplied port '{}' should be a number from 0 to 65535", input))]
+    #[error("Supplied port '{}' should be a number from 0 to 65535", input)]
     InvalidPort {
         input: String,
         source: std::num::ParseIntError,
@@ -96,52 +96,49 @@ impl FromStr for TncAddress {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ensure!(
-            s.starts_with("tnc:"),
-            NoTncPrefix {
-                string: s.to_string()
-            }
-        );
+        if !s.starts_with("tnc:") {
+            Err(ParseError::NoTncPrefix {
+                string: s.to_string(),
+            })?;
+        }
         let components: Vec<&str> = s.split(':').collect();
         let len = components.len();
         Ok(match components[1] {
             "tcpkiss" => {
-                ensure!(
-                    len == 4,
-                    WrongParameterCount {
-                        tnc_type: components[1],
+                if len != 4 {
+                    Err(ParseError::WrongParameterCount {
+                        tnc_type: components[1].to_string(),
                         expected: 2usize,
-                        actual: len - 2
-                    }
-                );
+                        actual: len - 2,
+                    })?;
+                }
                 TncAddress {
                     config: ConnectConfig::TcpKiss(TcpKissConfig {
                         host: components[2].to_string(),
-                        port: components[3].parse().context(InvalidPort {
+                        port: components[3].parse().map_err(|e| ParseError::InvalidPort {
                             input: components[3].to_string(),
+                            source: e,
                         })?,
                     }),
                 }
             }
             "linuxif" => {
-                ensure!(
-                    len == 3,
-                    WrongParameterCount {
-                        tnc_type: components[1],
+                if len != 3 {
+                    Err(ParseError::WrongParameterCount {
+                        tnc_type: components[1].to_string(),
                         expected: 1usize,
-                        actual: len - 2
-                    }
-                );
+                        actual: len - 2,
+                    })?;
+                }
                 TncAddress {
                     config: ConnectConfig::LinuxIf(LinuxIfConfig {
                         callsign: components[2].to_string(),
                     }),
                 }
             }
-            unknown => UnknownType {
+            unknown => Err(ParseError::UnknownType {
                 tnc_type: unknown.to_string(),
-            }
-            .fail()?,
+            })?,
         })
     }
 }
@@ -195,18 +192,17 @@ struct LinuxIfTnc {
 
 impl LinuxIfTnc {
     fn open(config: &LinuxIfConfig) -> Result<Self, TncError> {
-        let socket = linux::Ax25RawSocket::new().context(OpenTnc)?;
+        let socket = linux::Ax25RawSocket::new().map_err(|e| TncError::OpenTnc { source: e })?;
         let ifindex = match socket
             .list_ax25_interfaces()
-            .context(OpenTnc)?
+            .map_err(|e| TncError::OpenTnc { source: e })?
             .iter()
             .find(|nd| nd.name.to_uppercase() == config.callsign.to_uppercase())
         {
             Some(nd) => nd.ifindex,
-            None => InterfaceNotFound {
+            None => Err(TncError::InterfaceNotFound {
                 callsign: config.callsign.clone(),
-            }
-            .fail()?,
+            })?,
         };
         Ok(Self {
             socket: Arc::new(socket),
@@ -219,12 +215,15 @@ impl TncImpl for LinuxIfTnc {
     fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError> {
         self.socket
             .send_frame(&frame.to_bytes(), self.ifindex)
-            .context(SendFrame)
+            .map_err(|e| TncError::SendFrame { source: e })
     }
 
     fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         loop {
-            let bytes = self.socket.receive_frame(self.ifindex).context(ReceiveFrame)?;
+            let bytes = self
+                .socket
+                .receive_frame(self.ifindex)
+                .map_err(|e| TncError::ReceiveFrame { source: e })?;
             if let Ok(parsed) = Ax25Frame::from_bytes(&bytes) {
                 return Ok(parsed);
             }
@@ -248,7 +247,7 @@ impl TcpKissTnc {
         Ok(Self {
             iface: Arc::new(
                 kiss::TcpKissInterface::new(format!("{}:{}", config.host, config.port))
-                    .context(OpenTnc)?,
+                    .map_err(|e| TncError::OpenTnc { source: e })?,
             ),
         })
     }
@@ -256,12 +255,17 @@ impl TcpKissTnc {
 
 impl TncImpl for TcpKissTnc {
     fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError> {
-        self.iface.send_frame(&frame.to_bytes()).context(SendFrame)
+        self.iface
+            .send_frame(&frame.to_bytes())
+            .map_err(|e| TncError::SendFrame { source: e })
     }
 
     fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         loop {
-            let bytes = self.iface.receive_frame().context(ReceiveFrame)?;
+            let bytes = self
+                .iface
+                .receive_frame()
+                .map_err(|e| TncError::ReceiveFrame { source: e })?;
             if let Ok(parsed) = Ax25Frame::from_bytes(&bytes) {
                 return Ok(parsed);
             }

@@ -1,40 +1,40 @@
-use snafu::{ensure, OptionExt, ResultExt, Snafu};
 use std::fmt;
 use std::str::FromStr;
+use thiserror::Error;
 
 /// Errors when parsing a callsign-SSID into an `Address`
-#[derive(Debug, Snafu)]
+#[derive(Debug, Error)]
 pub enum AddressParseError {
-    #[snafu(display("Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"))]
+    #[error("Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0")]
     InvalidFormat,
-    #[snafu(display("Could not parse SSID: {}", source))]
+    #[error("Could not parse SSID: {}", source)]
     InvalidSsid { source: std::num::ParseIntError },
-    #[snafu(display("SSID must be between 0 and 15"))]
+    #[error("SSID must be between 0 and 15")]
     SsidOutOfRange,
 }
 
 /// Errors when parsing a byte buffer into an `Ax25Frame`
-#[derive(Debug, Snafu)]
+#[derive(Debug, Error)]
 pub enum FrameParseError {
-    #[snafu(display("Supplied frame only contains null bytes"))]
+    #[error("Supplied frame only contains null bytes")]
     OnlyNullBytes,
-    #[snafu(display("Unable to locate end of address field"))]
+    #[error("Unable to locate end of address field")]
     NoEndToAddressField,
-    #[snafu(display("Address field too short: start {} end {}", start, end))]
+    #[error("Address field too short: start {} end {}", start, end)]
     AddressFieldTooShort { start: usize, end: usize },
-    #[snafu(display("Frame is too short: len {}", len))]
+    #[error("Frame is too short: len {}", len)]
     FrameTooShort { len: usize },
-    #[snafu(display("Callsign is not valid UTF-8"))]
+    #[error("Callsign is not valid UTF-8")]
     AddressInvalidUtf8 { source: std::string::FromUtf8Error },
-    #[snafu(display("Content section of frame is empty"))]
+    #[error("Content section of frame is empty")]
     ContentZeroLength,
-    #[snafu(display("Protocol ID field is missing"))]
+    #[error("Protocol ID field is missing")]
     MissingPidField,
-    #[snafu(display("Unrecognised U field type"))]
+    #[error("Unrecognised U field type")]
     UnrecognisedSFieldType,
-    #[snafu(display("Unrecognised S field type"))]
+    #[error("Unrecognised S field type")]
     UnrecognisedUFieldType,
-    #[snafu(display("Wrong size for FRMR info"))]
+    #[error("Wrong size for FRMR info")]
     WrongSizeFrmrInfo,
 }
 
@@ -361,18 +361,26 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
-        ensure!(parts.len() == 2, InvalidFormat);
+        if parts.len() != 2 {
+            Err(AddressParseError::InvalidFormat)?;
+        }
 
         let callsign = parts[0].to_uppercase();
-        ensure!(!callsign.is_empty() && callsign.len() <= 6, InvalidFormat);
+        if callsign.is_empty() || callsign.len() > 6 {
+            Err(AddressParseError::InvalidFormat)?;
+        }
         for c in callsign.chars() {
             if !c.is_alphanumeric() {
-                InvalidFormat.fail()?;
+                Err(AddressParseError::InvalidFormat)?;
             }
         }
 
-        let ssid = parts[1].parse::<u8>().context(InvalidSsid)?;
-        ensure!(ssid <= 15, SsidOutOfRange);
+        let ssid = parts[1]
+            .parse::<u8>()
+            .map_err(|e| AddressParseError::InvalidSsid { source: e })?;
+        if ssid > 15 {
+            Err(AddressParseError::SsidOutOfRange)?;
+        }
 
         // c_bit will be set on transmit
         Ok(Address {
@@ -427,21 +435,25 @@ impl Ax25Frame {
         // Skip over leading null bytes
         // Linux AF_PACKET has oen of these - we will strip it out in the linux module
         // but also keep the protection here
-        let addr_start = bytes.iter().position(|&c| c != 0).context(OnlyNullBytes)?;
+        let addr_start = bytes
+            .iter()
+            .position(|&c| c != 0)
+            .ok_or(FrameParseError::OnlyNullBytes)?;
         let addr_end = bytes
             .iter()
             .position(|&c| c & 0x01 == 0x01)
-            .context(NoEndToAddressField)?;
+            .ok_or(FrameParseError::NoEndToAddressField)?;
         let control = addr_end + 1;
         // +1 because the "terminator" is actually within the last byte
-        ensure!(
-            addr_end - addr_start + 1 >= 14,
-            AddressFieldTooShort {
+        if addr_end - addr_start + 1 < 14 {
+            Err(FrameParseError::AddressFieldTooShort {
                 start: addr_start,
-                end: addr_end
-            }
-        );
-        ensure!(control < bytes.len(), FrameTooShort { len: bytes.len() });
+                end: addr_end,
+            })?;
+        }
+        if control >= bytes.len() {
+            Err(FrameParseError::FrameTooShort { len: bytes.len() })?;
+        }
 
         let dest = parse_address(&bytes[addr_start..addr_start + 7])?;
         let src = parse_address(&bytes[addr_start + 7..addr_start + 14])?;
@@ -521,14 +533,17 @@ fn parse_address(bytes: &[u8]) -> Result<Address, FrameParseError> {
         .collect::<Vec<u8>>();
     dest_utf8.reverse();
     Ok(Address {
-        callsign: String::from_utf8(dest_utf8).context(AddressInvalidUtf8)?,
+        callsign: String::from_utf8(dest_utf8)
+            .map_err(|e| FrameParseError::AddressInvalidUtf8 { source: e })?,
         ssid: (bytes[6] >> 1) & 0x0f,
         c_bit: bytes[6] & 0b1000_0000 > 0,
     })
 }
 
 fn parse_i_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
-    ensure!(bytes.len() >= 2, MissingPidField);
+    if bytes.len() < 2 {
+        Err(FrameParseError::MissingPidField)?;
+    }
     let c = bytes[0]; // control octet
     Ok(FrameContent::Information(Information {
         receive_sequence: (c & 0b1110_0000) >> 5,
@@ -559,7 +574,7 @@ fn parse_s_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
             receive_sequence: n_r,
             poll_or_final,
         })),
-        _ => Err(UnrecognisedSFieldType.fail()?),
+        _ => Err(FrameParseError::UnrecognisedSFieldType)?,
     }
 }
 
@@ -589,12 +604,14 @@ fn parse_u_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
         })),
         0b1000_0111 => parse_frmr_frame(bytes),
         0b0000_0011 => parse_ui_frame(bytes),
-        _ => Err(UnrecognisedUFieldType.fail()?),
+        _ => Err(FrameParseError::UnrecognisedUFieldType)?,
     }
 }
 
 fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
-    ensure!(bytes.len() >= 2, MissingPidField);
+    if bytes.len() < 2 {
+        Err(FrameParseError::MissingPidField)?;
+    }
     // Control, then PID, then Info
     Ok(FrameContent::UnnumberedInformation(UnnumberedInformation {
         poll_or_final: bytes[0] & 0b0001_0000 > 0,
@@ -606,7 +623,7 @@ fn parse_ui_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
 fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
     // Expect 24 bits following the control
     if bytes.len() != 4 {
-        return Err(WrongSizeFrmrInfo.fail()?);
+        Err(FrameParseError::WrongSizeFrmrInfo)?;
     }
     Ok(FrameContent::FrameReject(FrameReject {
         final_bit: bytes[0] & 0b0001_0000 > 0,
@@ -627,7 +644,9 @@ fn parse_frmr_frame(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
 
 /// Parse the content of the frame starting from the control field
 fn parse_content(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
-    ensure!(!bytes.is_empty(), ContentZeroLength);
+    if bytes.is_empty() {
+        Err(FrameParseError::ContentZeroLength)?;
+    }
     match bytes[0] {
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
         c if c & 0x03 == 0x01 => parse_s_frame(bytes),
