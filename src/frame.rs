@@ -39,7 +39,7 @@ pub enum FrameParseError {
 }
 
 /// Human-readable protocol identifiers, mostly from the AX.25 2.2 spec.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ProtocolIdentifier {
     Layer3Impl,
     X25Plp,
@@ -106,14 +106,14 @@ impl ProtocolIdentifier {
 }
 
 /// Indicates whether a given frame is a Command or a Response.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CommandResponse {
     Command,
     Response,
 }
 
 /// Information (I) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Information {
     pub pid: ProtocolIdentifier,
     pub info: Vec<u8>,
@@ -123,52 +123,52 @@ pub struct Information {
 }
 
 /// RR Supervisory (S) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReceiveReady {
     pub receive_sequence: u8,
     pub poll_or_final: bool,
 }
 
 /// RNR Supervisory (S) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReceiveNotReady {
     pub receive_sequence: u8,
     pub poll_or_final: bool,
 }
 
 /// REJ Supervisory (S) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Reject {
     pub receive_sequence: u8,
     pub poll_or_final: bool,
 }
 
 /// SABM Unnumbered (U) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SetAsynchronousBalancedMode {
     pub poll: bool,
 }
 
 /// DISC Unnumbered (U) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Disconnect {
     pub poll: bool,
 }
 
 /// DM Unnumbered (U) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DisconnectedMode {
     pub final_bit: bool, // 'final' is a rust keyword
 }
 
 /// UA Unnumbered (U) frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnnumberedAcknowledge {
     pub final_bit: bool,
 }
 
 /// FRMR Unnumbered (U) frame. Flags correspond to names in the AX.25 specification.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FrameReject {
     pub final_bit: bool,
     /// A raw copy of the control field in the frame that was rejected
@@ -187,7 +187,7 @@ pub struct FrameReject {
 }
 
 /// UI Unnumbered Information frame
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnnumberedInformation {
     pub pid: ProtocolIdentifier,
     pub info: Vec<u8>,
@@ -195,13 +195,13 @@ pub struct UnnumberedInformation {
 }
 
 /// Placeholder for when the Address part was parseable but not the control field
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnknownContent {
     pub raw: Vec<u8>,
 }
 
 /// The body of the frame after the end of the address field
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FrameContent {
     Information(Information),
     ReceiveReady(ReceiveReady),
@@ -392,7 +392,7 @@ impl FromStr for Address {
 }
 
 /// A single hop in the frame's route
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RouteEntry {
     /// Callsign-SSID of a repeater to use for source routing.
     pub repeater: Address,
@@ -401,7 +401,7 @@ pub struct RouteEntry {
 }
 
 /// A strongly-typed representation of a single AX.25 frame.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ax25Frame {
     /// Sending station
     pub source: Address,

@@ -2,8 +2,11 @@ use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
+use std::sync::mpsc::{Sender, Receiver, channel};
+use std::collections::VecDeque;
+use std::thread;
 
 /// Errors that can occur when interacting with a `Tnc`.
 #[derive(Debug, Error)]
@@ -154,6 +157,8 @@ trait TncImpl: Send + Sync {
 /// A local or remote TNC attached to a radio, which can send and receive frames.
 pub struct Tnc {
     imp: Box<dyn TncImpl>,
+    senders: Arc<Mutex<Vec<Sender<Ax25Frame>>>>,
+    buffer: Arc<Mutex<VecDeque<Ax25Frame>>>,
 }
 
 impl Tnc {
@@ -163,7 +168,33 @@ impl Tnc {
             ConnectConfig::TcpKiss(config) => Box::new(TcpKissTnc::open(&config)?),
             ConnectConfig::LinuxIf(config) => Box::new(LinuxIfTnc::open(&config)?),
         };
-        Ok(Self { imp })
+        Ok(Tnc::new(imp))
+    }
+
+    fn new(imp: Box<dyn TncImpl>) -> Self {
+        let tnc = Tnc {
+            imp,
+            senders: Arc::new(Mutex::new(Vec::new())),
+            buffer: Arc::new(Mutex::new(VecDeque::new())),
+        };
+        {
+            let tnc = tnc.clone();
+            // TODO how to allow this thread to exit?
+            thread::spawn(move || {
+                loop {
+                    // TODO what to do if this fails?
+                    if let Ok(x) = tnc.imp.receive_frame() {
+                        tnc.buffer.lock().unwrap().push_back(x.clone());
+                        tnc.senders.lock().unwrap().retain(|s| {
+                            let x = (&x).clone();
+                            // If there's an error, remove sender from vec
+                            s.send(x).is_ok()
+                        });
+                    }
+                }
+            });
+        }
+        tnc
     }
 
     /// Transmit a frame on the radio. Transmission is not guaranteed even if a
@@ -177,12 +208,22 @@ impl Tnc {
     pub fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
         self.imp.receive_frame()
     }
+
+    /// Create a new `Receiver<Ax25Frame>`
+    /// This will receive a copy of all incoming frames.
+    pub fn incoming(&mut self) -> Receiver<Ax25Frame> {
+        let (sender, receiver) = channel();
+        self.senders.lock().unwrap().push(sender);
+        receiver
+    }
 }
 
 impl Clone for Tnc {
     fn clone(&self) -> Self {
         Tnc {
             imp: self.imp.clone(),
+            senders: self.senders.clone(),
+            buffer: self.buffer.clone()
         }
     }
 }
