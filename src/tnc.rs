@@ -186,9 +186,8 @@ impl Tnc {
                     if let Ok(x) = tnc.imp.receive_frame() {
                         tnc.buffer.lock().unwrap().push_back(x.clone());
                         tnc.senders.lock().unwrap().retain(|s| {
-                            let x = (&x).clone();
                             // If there's an error, remove sender from vec
-                            s.send(x).is_ok()
+                            s.send(x.clone()).is_ok()
                         });
                     }
                 }
