@@ -1,12 +1,12 @@
 use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use thiserror::Error;
-use std::sync::mpsc::{Sender, Receiver, channel};
 use std::collections::VecDeque;
+use std::str::FromStr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::thread;
+use thiserror::Error;
 
 /// Errors that can occur when interacting with a `Tnc`.
 #[derive(Debug, Error)]
@@ -223,7 +223,7 @@ impl Clone for Tnc {
         Tnc {
             imp: self.imp.clone(),
             senders: self.senders.clone(),
-            buffer: self.buffer.clone()
+            buffer: self.buffer.clone(),
         }
     }
 }
