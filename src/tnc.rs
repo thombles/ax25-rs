@@ -3,7 +3,7 @@ use crate::kiss;
 use crate::linux;
 use std::collections::VecDeque;
 use std::str::FromStr;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
@@ -158,7 +158,7 @@ trait TncImpl: Send + Sync {
 pub struct Tnc {
     imp: Box<dyn TncImpl>,
     senders: Arc<Mutex<Vec<Sender<Ax25Frame>>>>,
-    buffer: Arc<Mutex<VecDeque<Ax25Frame>>>,
+    receiver: Arc<Mutex<Receiver<Ax25Frame>>>,
 }
 
 impl Tnc {
@@ -172,10 +172,11 @@ impl Tnc {
     }
 
     fn new(imp: Box<dyn TncImpl>) -> Self {
+        let (sender, receiver) = channel();
         let tnc = Tnc {
             imp,
-            senders: Arc::new(Mutex::new(Vec::new())),
-            buffer: Arc::new(Mutex::new(VecDeque::new())),
+            senders: Arc::new(Mutex::new(vec![sender])),
+            receiver: Arc::new(Mutex::new(receiver)),
         };
         {
             let tnc = tnc.clone();
@@ -184,7 +185,6 @@ impl Tnc {
                 loop {
                     // TODO what to do if this fails?
                     if let Ok(x) = tnc.imp.receive_frame() {
-                        tnc.buffer.lock().unwrap().push_back(x.clone());
                         tnc.senders.lock().unwrap().retain(|s| {
                             // If there's an error, remove sender from vec
                             s.send(x.clone()).is_ok()
@@ -204,8 +204,8 @@ impl Tnc {
 
     /// Block to receive a frame from the radio. If you want to do this on
     /// a separate thread from sending, clone the `Tnc`.
-    pub fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
-        self.imp.receive_frame()
+    pub fn receive_frame(&self) -> Result<Ax25Frame, RecvError> {
+        self.receiver.lock().unwrap().recv()
     }
 
     /// Create a new `Receiver<Ax25Frame>`
@@ -222,7 +222,7 @@ impl Clone for Tnc {
         Tnc {
             imp: self.imp.clone(),
             senders: self.senders.clone(),
-            buffer: self.buffer.clone(),
+            receiver: self.receiver.clone(),
         }
     }
 }
