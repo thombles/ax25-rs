@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let addr = args[1].parse::<TncAddress>()?;
     let src = args[2].parse::<Address>()?;
-    let tnc = Tnc::open(&addr)?;
+    let mut tnc = Tnc::open(&addr)?;
 
     // Do periodic announcements on a second thread
     let broadcast_dest = "TIME-0".parse::<Address>().unwrap();
@@ -31,7 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Receive on the initial thread
-    while let Ok(frame) = tnc.receive_frame() {
+    let receiver = tnc.incoming();
+    while let Ok(frame) = receiver.recv().unwrap() {
         // If someone asks us what the time is, tell them immediately
         if let Some(text) = frame.info_string_lossy() {
             if text.contains("what is the time?") {
