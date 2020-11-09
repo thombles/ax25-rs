@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let addr = args[1].parse::<TncAddress>()?;
     let src = args[2].parse::<Address>()?;
-    let mut tnc = Tnc::open(&addr)?;
+    let tnc = Tnc::open(&addr)?;
 
     // Do periodic announcements on a second thread
     let broadcast_dest = "TIME-0".parse::<Address>().unwrap();

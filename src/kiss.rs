@@ -3,6 +3,7 @@ use std::io::prelude::*;
 use std::net::Shutdown;
 use std::net::TcpStream;
 use std::net::ToSocketAddrs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 const FEND: u8 = 0xC0;
@@ -16,7 +17,7 @@ pub(crate) struct TcpKissInterface {
     tx_stream: Mutex<TcpStream>,
     rx_stream: Mutex<TcpStream>,
     buffer: Mutex<Vec<u8>>,
-    is_shutdown: Mutex<bool>,
+    is_shutdown: AtomicBool,
 }
 
 impl TcpKissInterface {
@@ -27,7 +28,7 @@ impl TcpKissInterface {
             tx_stream: Mutex::new(tx_stream),
             rx_stream: Mutex::new(rx_stream),
             buffer: Mutex::new(Vec::new()),
-            is_shutdown: Mutex::new(false),
+            is_shutdown: AtomicBool::new(false),
         })
     }
 
@@ -64,8 +65,8 @@ impl TcpKissInterface {
     }
 
     pub(crate) fn shutdown(&self) {
-        if !*self.is_shutdown.lock().unwrap() {
-            *self.is_shutdown.lock().unwrap() = true;
+        if !self.is_shutdown.load(Ordering::SeqCst) {
+            self.is_shutdown.store(true, Ordering::SeqCst);
             let tx_stream = self.tx_stream.lock().unwrap();
             let _ = tx_stream.shutdown(Shutdown::Both);
         }

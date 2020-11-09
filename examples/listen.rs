@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let addr = args[1].parse::<TncAddress>()?;
-    let mut tnc = Tnc::open(&addr)?;
+    let tnc = Tnc::open(&addr)?;
 
     let receiver = tnc.incoming();
     while let Ok(frame) = receiver.recv().unwrap() {

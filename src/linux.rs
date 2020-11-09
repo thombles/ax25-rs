@@ -1,7 +1,7 @@
 #[cfg(not(target_os = "linux"))]
 use std::io::ErrorKind;
 use std::io::{self, Error};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// An active AX.25 network interface, e.g. "ax0"
 pub(crate) struct NetDev {
@@ -13,7 +13,7 @@ pub(crate) struct NetDev {
 pub(crate) struct Ax25RawSocket {
     #[cfg(target_os = "linux")]
     fd: i32,
-    is_shutdown: Mutex<bool>,
+    is_shutdown: AtomicBool,
 }
 
 impl Ax25RawSocket {
@@ -75,8 +75,8 @@ impl Ax25RawSocket {
 
     /// Shutdown the socket.
     pub(crate) fn shutdown(&self) {
-        if !*self.is_shutdown.lock().unwrap() {
-            *self.is_shutdown.lock().unwrap() = true;
+        if !self.is_shutdown.load(Ordering::SeqCst) {
+            self.is_shutdown.store(true, Ordering::SeqCst);
             #[cfg(target_os = "linux")]
             {
                 let _ = sys::socket_close(self);
@@ -112,7 +112,7 @@ mod sys {
             -1 => Err(Error::last_os_error()),
             fd => Ok(Ax25RawSocket {
                 fd,
-                is_shutdown: Mutex::new(false),
+                is_shutdown: AtomicBool::new(false),
             }),
         }
     }
