@@ -1,6 +1,7 @@
 #[cfg(not(target_os = "linux"))]
 use std::io::ErrorKind;
 use std::io::{self, Error};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// An active AX.25 network interface, e.g. "ax0"
 pub(crate) struct NetDev {
@@ -12,6 +13,7 @@ pub(crate) struct NetDev {
 pub(crate) struct Ax25RawSocket {
     #[cfg(target_os = "linux")]
     fd: i32,
+    is_shutdown: AtomicBool,
 }
 
 impl Ax25RawSocket {
@@ -70,14 +72,22 @@ impl Ax25RawSocket {
             ))
         }
     }
+
+    /// Shutdown the socket.
+    pub(crate) fn shutdown(&self) {
+        if !self.is_shutdown.load(Ordering::SeqCst) {
+            self.is_shutdown.store(true, Ordering::SeqCst);
+            #[cfg(target_os = "linux")]
+            {
+                let _ = sys::socket_close(self);
+            }
+        }
+    }
 }
 
 impl Drop for Ax25RawSocket {
     fn drop(&mut self) {
-        #[cfg(target_os = "linux")]
-        {
-            let _ = sys::socket_close(self);
-        }
+        self.shutdown();
     }
 }
 
@@ -100,11 +110,14 @@ mod sys {
     pub(crate) fn socket_new() -> io::Result<Ax25RawSocket> {
         match unsafe { socket(AF_PACKET, SOCK_RAW, ETH_P_AX25.to_be() as i32) } {
             -1 => Err(Error::last_os_error()),
-            fd => Ok(Ax25RawSocket { fd }),
+            fd => Ok(Ax25RawSocket {
+                fd,
+                is_shutdown: AtomicBool::new(false),
+            }),
         }
     }
 
-    pub(crate) fn socket_close(socket: &mut Ax25RawSocket) -> io::Result<()> {
+    pub(crate) fn socket_close(socket: &Ax25RawSocket) -> io::Result<()> {
         match unsafe { close(socket.fd) } {
             -1 => Err(Error::last_os_error()),
             _ => Ok(()),

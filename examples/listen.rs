@@ -15,7 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = args[1].parse::<TncAddress>()?;
     let tnc = Tnc::open(&addr)?;
 
-    while let Ok(frame) = tnc.receive_frame() {
+    let receiver = tnc.incoming();
+    while let Ok(frame) = receiver.recv().unwrap() {
         println!("{}", Local::now());
         println!("{}", frame);
     }

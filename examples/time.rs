@@ -31,7 +31,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Receive on the initial thread
-    while let Ok(frame) = tnc.receive_frame() {
+    let receiver = tnc.incoming();
+    while let Ok(frame) = receiver.recv().unwrap() {
         // If someone asks us what the time is, tell them immediately
         if let Some(text) = frame.info_string_lossy() {
             if text.contains("what is the time?") {

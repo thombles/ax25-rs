@@ -2,7 +2,9 @@ use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use thiserror::Error;
 
 /// Errors that can occur when interacting with a `Tnc`.
@@ -84,7 +86,7 @@ impl TncAddress {
         }
     }
 
-    /// Porgrammatically create a `TncAddress` pointing to a KISS TCP service.
+    /// Programmatically create a `TncAddress` pointing to a KISS TCP service.
     pub fn new_tcpkiss(tcpkiss: TcpKissConfig) -> Self {
         TncAddress {
             config: ConnectConfig::TcpKiss(tcpkiss),
@@ -149,12 +151,12 @@ trait TncImpl: Send + Sync {
     fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError>;
     fn receive_frame(&self) -> Result<Ax25Frame, TncError>;
     fn clone(&self) -> Box<dyn TncImpl>;
+    fn shutdown(&self);
 }
 
 /// A local or remote TNC attached to a radio, which can send and receive frames.
-pub struct Tnc {
-    imp: Box<dyn TncImpl>,
-}
+#[derive(Clone)]
+pub struct Tnc(Arc<Mutex<TncInner>>);
 
 impl Tnc {
     /// Attempt to obtain a `Tnc` connection using the provided address.
@@ -163,7 +165,58 @@ impl Tnc {
             ConnectConfig::TcpKiss(config) => Box::new(TcpKissTnc::open(&config)?),
             ConnectConfig::LinuxIf(config) => Box::new(LinuxIfTnc::open(&config)?),
         };
-        Ok(Self { imp })
+        Ok(Tnc(Arc::new(Mutex::new(TncInner::new(imp)))))
+    }
+
+    /// Transmit a frame on the radio. Transmission is not guaranteed even if a
+    /// `Ok` result is returned.
+    pub fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError> {
+        self.0.lock().unwrap().send_frame(frame)
+    }
+
+    /// Create a new `Receiver<Result<Ax25Frame, TncError>>`
+    /// This will receive a copy of all incoming frames.
+    pub fn incoming(&self) -> Receiver<Ax25FrameResult> {
+        self.0.lock().unwrap().incoming()
+    }
+}
+
+pub type Ax25FrameResult = Result<Ax25Frame, Arc<TncError>>;
+
+struct TncInner {
+    imp: Box<dyn TncImpl>,
+    senders: Arc<Mutex<Vec<Sender<Ax25FrameResult>>>>,
+}
+
+impl TncInner {
+    fn new(imp: Box<dyn TncImpl>) -> Self {
+        let senders: Arc<Mutex<Vec<Sender<Ax25FrameResult>>>> = Arc::new(Mutex::new(Vec::new()));
+
+        {
+            let imp = imp.clone();
+            let senders = senders.clone();
+
+            thread::spawn(move || {
+                loop {
+                    let x = match imp.receive_frame() {
+                        Ok(a) => Ok(a),
+                        Err(e) => Err(Arc::new(e)),
+                    };
+
+                    senders.lock().unwrap().retain(|s| {
+                        // If there's an error, remove sender from vec
+                        s.send(x.clone()).is_ok()
+                    });
+                    if x.is_err() {
+                        break;
+                    }
+                }
+
+                senders.lock().unwrap().clear();
+            });
+        }
+
+        TncInner { imp, senders }
     }
 
     /// Transmit a frame on the radio. Transmission is not guaranteed even if a
@@ -172,18 +225,18 @@ impl Tnc {
         self.imp.send_frame(frame)
     }
 
-    /// Block to receive a frame from the radio. If you want to do this on
-    /// a separate thread from sending, clone the `Tnc`.
-    pub fn receive_frame(&self) -> Result<Ax25Frame, TncError> {
-        self.imp.receive_frame()
+    /// Create a new `Receiver<Result<Ax25Frame, TncError>>`
+    /// This will receive a copy of all incoming frames.
+    pub fn incoming(&self) -> Receiver<Ax25FrameResult> {
+        let (sender, receiver) = channel();
+        self.senders.lock().unwrap().push(sender);
+        receiver
     }
 }
 
-impl Clone for Tnc {
-    fn clone(&self) -> Self {
-        Tnc {
-            imp: self.imp.clone(),
-        }
+impl Drop for TncInner {
+    fn drop(&mut self) {
+        self.imp.shutdown();
     }
 }
 
@@ -240,6 +293,10 @@ impl TncImpl for LinuxIfTnc {
             ifindex: self.ifindex,
         })
     }
+
+    fn shutdown(&self) {
+        self.socket.shutdown();
+    }
 }
 
 struct TcpKissTnc {
@@ -280,6 +337,10 @@ impl TncImpl for TcpKissTnc {
         Box::new(TcpKissTnc {
             iface: self.iface.clone(),
         })
+    }
+
+    fn shutdown(&self) {
+        self.iface.shutdown();
     }
 }
 
