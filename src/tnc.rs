@@ -2,7 +2,6 @@ use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -152,6 +151,7 @@ trait TncImpl: Send + Sync {
     fn send_frame(&self, frame: &Ax25Frame) -> Result<(), TncError>;
     fn receive_frame(&self) -> Result<Ax25Frame, TncError>;
     fn clone(&self) -> Box<dyn TncImpl>;
+    fn shutdown(&self);
 }
 
 /// A local or remote TNC attached to a radio, which can send and receive frames.
@@ -176,7 +176,7 @@ impl Tnc {
 
     /// Create a new `Receiver<Result<Ax25Frame, TncError>>`
     /// This will receive a copy of all incoming frames.
-    pub fn incoming(&mut self) -> Receiver<Ax25FrameResult> {
+    pub fn incoming(&self) -> Receiver<Ax25FrameResult> {
         self.0.lock().unwrap().incoming()
     }
 }
@@ -186,21 +186,18 @@ pub type Ax25FrameResult = Result<Ax25Frame, Arc<TncError>>;
 struct TncInner {
     imp: Box<dyn TncImpl>,
     senders: Arc<Mutex<Vec<Sender<Ax25FrameResult>>>>,
-    disconnected: Arc<AtomicBool>,
 }
 
 impl TncInner {
     fn new(imp: Box<dyn TncImpl>) -> Self {
         let senders: Arc<Mutex<Vec<Sender<Ax25FrameResult>>>> = Arc::new(Mutex::new(Vec::new()));
-        let disconnected = Arc::new(AtomicBool::new(false));
 
         {
             let imp = imp.clone();
             let senders = senders.clone();
-            let disconnected = disconnected.clone();
 
             thread::spawn(move || {
-                while !disconnected.load(Ordering::Relaxed) {
+                loop {
                     let x = match imp.receive_frame() {
                         Ok(a) => Ok(a),
                         Err(e) => Err(Arc::new(e)),
@@ -211,7 +208,7 @@ impl TncInner {
                         s.send(x.clone()).is_ok()
                     });
                     if x.is_err() {
-                        disconnected.store(true, Ordering::Relaxed);
+                        break;
                     }
                 }
 
@@ -219,11 +216,7 @@ impl TncInner {
             });
         }
 
-        TncInner {
-            imp,
-            senders,
-            disconnected,
-        }
+        TncInner { imp, senders }
     }
 
     /// Transmit a frame on the radio. Transmission is not guaranteed even if a
@@ -234,7 +227,7 @@ impl TncInner {
 
     /// Create a new `Receiver<Result<Ax25Frame, TncError>>`
     /// This will receive a copy of all incoming frames.
-    pub fn incoming(&mut self) -> Receiver<Ax25FrameResult> {
+    pub fn incoming(&self) -> Receiver<Ax25FrameResult> {
         let (sender, receiver) = channel();
         self.senders.lock().unwrap().push(sender);
         receiver
@@ -243,7 +236,7 @@ impl TncInner {
 
 impl Drop for TncInner {
     fn drop(&mut self) {
-        self.disconnected.store(true, Ordering::Relaxed);
+        self.imp.shutdown();
     }
 }
 
@@ -300,6 +293,10 @@ impl TncImpl for LinuxIfTnc {
             ifindex: self.ifindex,
         })
     }
+
+    fn shutdown(&self) {
+        self.socket.shutdown();
+    }
 }
 
 struct TcpKissTnc {
@@ -340,6 +337,10 @@ impl TncImpl for TcpKissTnc {
         Box::new(TcpKissTnc {
             iface: self.iface.clone(),
         })
+    }
+
+    fn shutdown(&self) {
+        self.iface.shutdown();
     }
 }
 

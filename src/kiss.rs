@@ -16,6 +16,7 @@ pub(crate) struct TcpKissInterface {
     tx_stream: Mutex<TcpStream>,
     rx_stream: Mutex<TcpStream>,
     buffer: Mutex<Vec<u8>>,
+    is_shutdown: Mutex<bool>,
 }
 
 impl TcpKissInterface {
@@ -26,6 +27,7 @@ impl TcpKissInterface {
             tx_stream: Mutex::new(tx_stream),
             rx_stream: Mutex::new(rx_stream),
             buffer: Mutex::new(Vec::new()),
+            is_shutdown: Mutex::new(false),
         })
     }
 
@@ -60,12 +62,19 @@ impl TcpKissInterface {
         tx_stream.flush()?;
         Ok(())
     }
+
+    pub(crate) fn shutdown(&self) {
+        if !*self.is_shutdown.lock().unwrap() {
+            *self.is_shutdown.lock().unwrap() = true;
+            let tx_stream = self.tx_stream.lock().unwrap();
+            let _ = tx_stream.shutdown(Shutdown::Both);
+        }
+    }
 }
 
 impl Drop for TcpKissInterface {
     fn drop(&mut self) {
-        let tx_stream = self.tx_stream.lock().unwrap();
-        let _ = tx_stream.shutdown(Shutdown::Both);
+        self.shutdown();
     }
 }
 
