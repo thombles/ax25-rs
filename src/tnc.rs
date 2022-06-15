@@ -162,8 +162,8 @@ impl Tnc {
     /// Attempt to obtain a `Tnc` connection using the provided address.
     pub fn open(address: &TncAddress) -> Result<Self, TncError> {
         let imp: Box<dyn TncImpl> = match &address.config {
-            ConnectConfig::TcpKiss(config) => Box::new(TcpKissTnc::open(&config)?),
-            ConnectConfig::LinuxIf(config) => Box::new(LinuxIfTnc::open(&config)?),
+            ConnectConfig::TcpKiss(config) => Box::new(TcpKissTnc::open(config)?),
+            ConnectConfig::LinuxIf(config) => Box::new(LinuxIfTnc::open(config)?),
         };
         Ok(Tnc(Arc::new(Mutex::new(TncInner::new(imp)))))
     }
@@ -367,18 +367,14 @@ mod test {
                 })
             })
         );
-        assert!(match "fish".parse::<TncAddress>() {
-            Err(ParseError::NoTncPrefix { .. }) => true,
-            _ => false,
-        });
-        assert!(match "tnc:".parse::<TncAddress>() {
-            Err(ParseError::UnknownType { tnc_type }) => tnc_type == "",
-            _ => false,
-        });
-        assert!(match "tnc:fish".parse::<TncAddress>() {
-            Err(ParseError::UnknownType { tnc_type }) => tnc_type == "fish",
-            _ => false,
-        });
+        assert!(matches!(
+            "fish".parse::<TncAddress>(),
+            Err(ParseError::NoTncPrefix { .. })
+        ));
+        assert!(matches!("tnc:".parse::<TncAddress>(),
+            Err(ParseError::UnknownType { tnc_type }) if tnc_type.is_empty()));
+        assert!(matches!("tnc:fish".parse::<TncAddress>(),
+            Err(ParseError::UnknownType { tnc_type }) if tnc_type == "fish"));
         assert!(match "tnc:tcpkiss".parse::<TncAddress>() {
             Err(ParseError::WrongParameterCount {
                 tnc_type,

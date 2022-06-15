@@ -7,7 +7,7 @@ repository = "https://github.com/thombles/ax25-rs"
 keywords = ["amateur", "radio", "packet", "ham"]
 categories = ["network-programming"]
 license = "Apache-2.0"
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 
 [dependencies]
