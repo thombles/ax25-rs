@@ -2,11 +2,11 @@ use ax25::frame::{
     Address, Ax25Frame, CommandResponse, FrameContent, ProtocolIdentifier, UnnumberedInformation,
 };
 use ax25::tnc::{Tnc, TncAddress};
-use chrono::prelude::*;
 use std::env;
 use std::error::Error;
 use std::thread;
 use std::time::Duration;
+use time::OffsetDateTime;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -52,7 +52,7 @@ fn transmit_time(tnc: &Tnc, src: &Address, dest: &Address) -> Result<(), Box<dyn
         command_or_response: Some(CommandResponse::Command),
         content: FrameContent::UnnumberedInformation(UnnumberedInformation {
             pid: ProtocolIdentifier::None,
-            info: format!("The time is: {}", Local::now()).as_bytes().to_vec(),
+            info: format!("The time is: {}", OffsetDateTime::now_utc()).as_bytes().to_vec(),
             poll_or_final: false,
         }),
     };

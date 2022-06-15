@@ -1,6 +1,6 @@
 use ax25::tnc::{Tnc, TncAddress};
-use chrono::prelude::*;
 use std::env;
+use time::OffsetDateTime;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let receiver = tnc.incoming();
     while let Ok(frame) = receiver.recv().unwrap() {
-        println!("{}", Local::now());
+        println!("{}", OffsetDateTime::now_utc());
         println!("{}", frame);
     }
     Ok(())
