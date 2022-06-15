@@ -52,7 +52,9 @@ fn transmit_time(tnc: &Tnc, src: &Address, dest: &Address) -> Result<(), Box<dyn
         command_or_response: Some(CommandResponse::Command),
         content: FrameContent::UnnumberedInformation(UnnumberedInformation {
             pid: ProtocolIdentifier::None,
-            info: format!("The time is: {}", OffsetDateTime::now_utc()).as_bytes().to_vec(),
+            info: format!("The time is: {}", OffsetDateTime::now_utc())
+                .as_bytes()
+                .to_vec(),
             poll_or_final: false,
         }),
     };
