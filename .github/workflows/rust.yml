@@ -16,7 +16,7 @@ jobs:
     - name: Check formatting
       run: cargo fmt -- --check
     - name: Clippy
-      run: cargo clippy -- -Dwarnings
+      run: cargo clippy --tests -- -Dwarnings
 
   build-windows:
     runs-on: windows-latest
@@ -31,4 +31,4 @@ jobs:
     - name: Check formatting
       run: cargo fmt -- --check
     - name: Clippy
-      run: cargo clippy -- -Dwarnings
+      run: cargo clippy --tests -- -Dwarnings
