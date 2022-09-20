@@ -23,7 +23,7 @@ pub enum TncError {
 }
 
 /// Errors that can occur when parsing a `TncAddress` from a string.
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ParseError {
     #[error("TNC address '{}' is invalid - it should begin with 'tnc:'", string)]
     NoTncPrefix { string: String },
@@ -49,7 +49,7 @@ pub enum ParseError {
 
 /// Configuration details for a TCP KISS TNC. This structure can be created directly
 /// or indirectly by parsing a string into a `TncAddress`.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 pub struct TcpKissConfig {
     /// Hostname or IP address of the computer with the TNC
     pub host: String,
@@ -60,20 +60,20 @@ pub struct TcpKissConfig {
 /// Configuration details for a TNC attached as a Linux network interface using
 /// `kissattach`. This structure can be created directly or indirectly by parsing
 /// a string into a `TncAddress`.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 pub struct LinuxIfConfig {
     /// The hardware address associated with the interface, e.g. "VK7NTK-2"
     pub callsign: String,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 pub(crate) enum ConnectConfig {
     TcpKiss(TcpKissConfig),
     LinuxIf(LinuxIfConfig),
 }
 
 /// A parsed TNC address that can be used to open a `Tnc`.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 pub struct TncAddress {
     pub(crate) config: ConnectConfig,
 }
