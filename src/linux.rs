@@ -129,12 +129,10 @@ mod sys {
         let mut devices: Vec<NetDev> = Vec::new();
         let reader = BufReader::new(dev_file);
         let lines = reader.lines();
-        for l in lines.skip(2) {
-            if let Ok(line) = l {
-                let device_name = line.trim().split(':').next().unwrap();
-                if let Some(net_dev) = get_ax25_netdev(&device_name, socket.fd) {
-                    devices.push(net_dev);
-                }
+        for l in lines.skip(2).flatten() {
+            let device_name = l.trim().split(':').next().unwrap();
+            if let Some(net_dev) = get_ax25_netdev(device_name, socket.fd) {
+                devices.push(net_dev);
             }
         }
         Ok(devices)
@@ -246,30 +244,17 @@ mod sys {
         fn ioctl(fd: c_int, request: c_ulong, ifreq: *mut ifreq) -> c_int;
     }
 
+    #[derive(Default)]
     #[repr(C)]
     struct ifreq {
         ifr_name: [c_char; 16],
         data: ifreq_union,
     }
 
-    impl Default for ifreq {
-        fn default() -> ifreq {
-            ifreq {
-                ifr_name: [0; 16],
-                data: ifreq_union::default(),
-            }
-        }
-    }
-
+    #[derive(Default)]
     #[repr(C)]
     struct ifreq_union {
         data: [u8; 24],
-    }
-
-    impl Default for ifreq_union {
-        fn default() -> ifreq_union {
-            ifreq_union { data: [0; 24] }
-        }
     }
 
     impl ifreq_union {
