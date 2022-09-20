@@ -1,50 +1,100 @@
 use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
+use std::error::Error;
+use std::fmt;
 use std::str::FromStr;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use thiserror::Error;
 
 /// Errors that can occur when interacting with a `Tnc`.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum TncError {
-    #[error("Unable to connect to TNC: {}", source)]
     OpenTnc { source: std::io::Error },
-    #[error("Interface with specified callsign '{}' does not exist", callsign)]
     InterfaceNotFound { callsign: String },
-    #[error("Unable to send frame: {}", source)]
     SendFrame { source: std::io::Error },
-    #[error("Unable to receive frame: {}", source)]
     ReceiveFrame { source: std::io::Error },
-    #[error("Unable to make configuration change: {}", source)]
     ConfigFailed { source: std::io::Error },
 }
 
+impl Error for TncError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::OpenTnc { source } => Some(source),
+            Self::InterfaceNotFound { .. } => None,
+            Self::SendFrame { source } => Some(source),
+            Self::ReceiveFrame { source } => Some(source),
+            Self::ConfigFailed { source } => Some(source),
+        }
+    }
+}
+
+impl fmt::Display for TncError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OpenTnc { source } => write!(f, "Unable to connect to TNC: {}", source),
+            Self::InterfaceNotFound { callsign } => write!(
+                f,
+                "Interface with specified callsign '{}' does not exist",
+                callsign
+            ),
+            Self::SendFrame { source } => write!(f, "Unable to send frame: {}", source),
+            Self::ReceiveFrame { source } => write!(f, "Unable to receive frame: {}", source),
+            Self::ConfigFailed { source } => {
+                write!(f, "Unable to make configuration change: {}", source)
+            }
+        }
+    }
+}
+
 /// Errors that can occur when parsing a `TncAddress` from a string.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
-    #[error("TNC address '{}' is invalid - it should begin with 'tnc:'", string)]
-    NoTncPrefix { string: String },
-    #[error("Unknown TNC type {}", tnc_type)]
-    UnknownType { tnc_type: String },
-    #[error(
-        "TNC type '{}' expects {} parameters to follow but there are {}",
-        tnc_type,
-        expected,
-        actual
-    )]
+    NoTncPrefix {
+        string: String,
+    },
+    UnknownType {
+        tnc_type: String,
+    },
     WrongParameterCount {
         tnc_type: String,
         expected: usize,
         actual: usize,
     },
-    #[error("Supplied port '{}' should be a number from 0 to 65535", input)]
     InvalidPort {
         input: String,
         source: std::num::ParseIntError,
     },
+}
+
+impl Error for ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoTncPrefix { string } => write!(
+                f,
+                "TNC address '{}' is invalid - it should begin with 'tnc:'",
+                string
+            ),
+            Self::UnknownType { tnc_type } => write!(f, "Unknown TNC type {}", tnc_type),
+            Self::WrongParameterCount {
+                tnc_type,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "TNC type '{}' expects {} parameters to follow but there are {}",
+                tnc_type, expected, actual
+            ),
+            Self::InvalidPort { input, .. } => write!(
+                f,
+                "Supplied port '{}' should be a number from 0 to 65535",
+                input
+            ),
+        }
+    }
 }
 
 /// Configuration details for a TCP KISS TNC. This structure can be created directly

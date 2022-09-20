@@ -1,41 +1,78 @@
+use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
-use thiserror::Error;
 
 /// Errors when parsing a callsign-SSID into an `Address`
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum AddressParseError {
-    #[error("Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0")]
     InvalidFormat,
-    #[error("Could not parse SSID: {}", source)]
     InvalidSsid { source: std::num::ParseIntError },
-    #[error("SSID must be between 0 and 15")]
     SsidOutOfRange,
 }
 
+impl Error for AddressParseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::InvalidSsid { source } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for AddressParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidFormat => write!(
+                f,
+                "Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"
+            ),
+            Self::InvalidSsid { source } => write!(f, "Could not parse SSID: {}", source),
+            Self::SsidOutOfRange => write!(f, "SSID must be between 0 and 15 inclusive"),
+        }
+    }
+}
+
 /// Errors when parsing a byte buffer into an `Ax25Frame`
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum FrameParseError {
-    #[error("Supplied frame only contains null bytes")]
     OnlyNullBytes,
-    #[error("Unable to locate end of address field")]
     NoEndToAddressField,
-    #[error("Address field too short: start {} end {}", start, end)]
     AddressFieldTooShort { start: usize, end: usize },
-    #[error("Frame is too short: len {}", len)]
     FrameTooShort { len: usize },
-    #[error("Callsign is not valid UTF-8")]
     AddressInvalidUtf8 { source: std::string::FromUtf8Error },
-    #[error("Content section of frame is empty")]
     ContentZeroLength,
-    #[error("Protocol ID field is missing")]
     MissingPidField,
-    #[error("Unrecognised U field type")]
     UnrecognisedSFieldType,
-    #[error("Unrecognised S field type")]
     UnrecognisedUFieldType,
-    #[error("Wrong size for FRMR info")]
     WrongSizeFrmrInfo,
+}
+
+impl Error for FrameParseError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::AddressInvalidUtf8 { source } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for FrameParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OnlyNullBytes => write!(f, "Supplied frame only contains null bytes"),
+            Self::NoEndToAddressField => write!(f, "Unable to locate end of address field"),
+            Self::AddressFieldTooShort { start, end } => {
+                write!(f, "Address field too short: start {} end {}", start, end)
+            }
+            Self::FrameTooShort { len } => write!(f, "Frame is too short: len {}", len),
+            Self::AddressInvalidUtf8 { .. } => write!(f, "Callsign is not valid UTF-8"),
+            Self::ContentZeroLength => write!(f, "Content section of frame is empty"),
+            Self::MissingPidField => write!(f, "Protocol ID field is missing"),
+            Self::UnrecognisedUFieldType => write!(f, "Unrecognised U field type"),
+            Self::UnrecognisedSFieldType => write!(f, "Unrecognised S field type"),
+            Self::WrongSizeFrmrInfo => write!(f, "Wrong size for FRMR info"),
+        }
+    }
 }
 
 /// Human-readable protocol identifiers, mostly from the AX.25 2.2 spec.

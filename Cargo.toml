@@ -12,7 +12,6 @@ readme = "README.md"
 
 [dependencies]
 libc = "0.2"
-thiserror = "1.0"
 
 [dev-dependencies]
 time = { version = "0.3.9", features = ["local-offset"] }
