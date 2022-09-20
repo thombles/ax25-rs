@@ -1,0 +1,18 @@
+[package]
+name = "ax25_tnc"
+version = "0.3.0"
+authors = ["Thomas Karpiniec <tom.karpiniec@outlook.com>"]
+description = "Send and receive AX.25 with Packet Radio TNCs."
+repository = "https://github.com/thombles/ax25-rs"
+keywords = ["amateur", "radio", "packet", "ham"]
+categories = ["network-programming"]
+license = "Apache-2.0"
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+ax25 = { path = "../ax25" }
+libc = "0.2"
+
+[dev-dependencies]
+time = { version = "0.3.9", features = ["local-offset"] }

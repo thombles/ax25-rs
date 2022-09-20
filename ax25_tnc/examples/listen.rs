@@ -1,4 +1,4 @@
-use ax25::tnc::{Tnc, TncAddress};
+use ax25_tnc::tnc::{Tnc, TncAddress};
 use std::env;
 use time::OffsetDateTime;
 

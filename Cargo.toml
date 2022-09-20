@@ -1,17 +1,2 @@
-[package]
-name = "ax25"
-version = "0.2.0"
-authors = ["Thomas Karpiniec <tom.karpiniec@outlook.com>"]
-description = "Utilities for Packet Radio in Rust. AX.25 encoding/decoding and radio interfacing."
-repository = "https://github.com/thombles/ax25-rs"
-keywords = ["amateur", "radio", "packet", "ham"]
-categories = ["network-programming"]
-license = "Apache-2.0"
-edition = "2021"
-readme = "README.md"
-
-[dependencies]
-libc = "0.2"
-
-[dev-dependencies]
-time = { version = "0.3.9", features = ["local-offset"] }
+[workspace]
+members = ["ax25", "ax25_tnc"]

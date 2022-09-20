@@ -1,0 +1,17 @@
+[package]
+name = "ax25"
+version = "0.3.0"
+authors = ["Thomas Karpiniec <tom.karpiniec@outlook.com>"]
+description = "AX.25 encoding and decoding."
+repository = "https://github.com/thombles/ax25-rs"
+keywords = ["amateur", "radio", "packet", "ham", "no_std"]
+categories = ["network-programming"]
+license = "Apache-2.0"
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+
+[features]
+default = ["std"]
+std = []

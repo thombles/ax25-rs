@@ -1,7 +1,7 @@
 use ax25::frame::{
     Address, Ax25Frame, CommandResponse, FrameContent, ProtocolIdentifier, UnnumberedInformation,
 };
-use ax25::tnc::{Tnc, TncAddress};
+use ax25_tnc::tnc::{Tnc, TncAddress};
 use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

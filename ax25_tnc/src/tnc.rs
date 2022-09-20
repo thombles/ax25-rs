@@ -1,6 +1,6 @@
-use crate::frame::Ax25Frame;
 use crate::kiss;
 use crate::linux;
+use ax25::frame::Ax25Frame;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;

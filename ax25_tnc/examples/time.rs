@@ -1,7 +1,7 @@
 use ax25::frame::{
     Address, Ax25Frame, CommandResponse, FrameContent, ProtocolIdentifier, UnnumberedInformation,
 };
-use ax25::tnc::{Tnc, TncAddress};
+use ax25_tnc::tnc::{Tnc, TncAddress};
 use std::env;
 use std::error::Error;
 use std::thread;

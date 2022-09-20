@@ -1,17 +1,19 @@
-use std::error::Error;
-use std::fmt;
-use std::str::FromStr;
+use alloc::fmt;
+use alloc::str::FromStr;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Errors when parsing a callsign-SSID into an `Address`
 #[derive(Debug)]
 pub enum AddressParseError {
     InvalidFormat,
-    InvalidSsid { source: std::num::ParseIntError },
+    InvalidSsid { source: core::num::ParseIntError },
     SsidOutOfRange,
 }
 
-impl Error for AddressParseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+#[cfg(feature = "std")]
+impl std::error::Error for AddressParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::InvalidSsid { source } => Some(source),
             _ => None,
@@ -20,7 +22,7 @@ impl Error for AddressParseError {
 }
 
 impl fmt::Display for AddressParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidFormat => write!(
                 f,
@@ -37,9 +39,16 @@ impl fmt::Display for AddressParseError {
 pub enum FrameParseError {
     OnlyNullBytes,
     NoEndToAddressField,
-    AddressFieldTooShort { start: usize, end: usize },
-    FrameTooShort { len: usize },
-    AddressInvalidUtf8 { source: std::string::FromUtf8Error },
+    AddressFieldTooShort {
+        start: usize,
+        end: usize,
+    },
+    FrameTooShort {
+        len: usize,
+    },
+    AddressInvalidUtf8 {
+        source: alloc::string::FromUtf8Error,
+    },
     ContentZeroLength,
     MissingPidField,
     UnrecognisedSFieldType,
@@ -47,8 +56,9 @@ pub enum FrameParseError {
     WrongSizeFrmrInfo,
 }
 
-impl Error for FrameParseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+#[cfg(feature = "std")]
+impl std::error::Error for FrameParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::AddressInvalidUtf8 { source } => Some(source),
             _ => None,
@@ -57,7 +67,7 @@ impl Error for FrameParseError {
 }
 
 impl fmt::Display for FrameParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OnlyNullBytes => write!(f, "Supplied frame only contains null bytes"),
             Self::NoEndToAddressField => write!(f, "Unable to locate end of address field"),
@@ -387,7 +397,7 @@ impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let ssid_str = match self.ssid {
             0 => "".to_string(),
-            ssid => format!("-{}", ssid),
+            ssid => alloc::format!("-{}", ssid),
         };
         write!(f, "{}{}", self.callsign, ssid_str)
     }
