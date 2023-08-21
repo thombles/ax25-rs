@@ -1,7 +1,7 @@
 [package]
 name = "ax25_tnc"
 version = "0.3.0"
-authors = ["Thomas Karpiniec <tom.karpiniec@outlook.com>"]
+authors = ["Thomas Karpiniec <tk@1.21jiggawatts.net>"]
 description = "Send and receive AX.25 with Packet Radio TNCs."
 repository = "https://github.com/thombles/ax25-rs"
 keywords = ["amateur", "radio", "packet", "ham"]
@@ -11,6 +11,7 @@ edition = "2021"
 readme = "README.md"
 
 [dependencies]
+#ax25 = "0.3"
 ax25 = { path = "../ax25" }
 libc = "0.2"
 

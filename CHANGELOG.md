@@ -1,5 +1,12 @@
 # ax25 changelog
 
+## v0.3.0 - 21 Aug 2023
+
+* Make `ax25` support no_std while having a default `std` feature
+* Split TNC-related functionality into a separate `ax25_tnc` crate
+* Update Rust edition to 2021
+* Replace `chrono` with `time` and remove dependency on `thiserror`
+
 ## v0.2.0 - 2 Feb 2020
 
 * Support for KISS TNCs exposed on a TCP port, such as Dire Wolf

@@ -3,14 +3,26 @@
 <a href="https://crates.io/crates/ax25">
     <img src="https://img.shields.io/crates/v/ax25.svg" alt="crates.io">
 </a>
+<a href="https://crates.io/crates/ax25_tnc">
+    <img src="https://img.shields.io/crates/v/ax25_tnc.svg" alt="crates.io">
+</a>
 <a href="https://docs.rs/ax25">
     <img src="https://docs.rs/ax25/badge.svg" alt="docs.rs">
 </a>
+<a href="https://docs.rs/ax25_tnc">
+    <img src="https://docs.rs/ax25_tnc/badge.svg" alt="docs.rs">
+</a>
 
-This crate aims to provide everything you need to write cross-platform packet radio
+This project aims to provide everything you need to write cross-platform packet radio
 software in Rust.
 
+The crate `ax25` provides:
+
 * Encode and decode AX.25 frames (currently supporting v2.0)
+* Support for `no_std` environments
+
+The crate `ax25_tnc` provides:
+
 * KISS protocol
 * Connect to TNCs via multiple methods without needing to change your code
 
@@ -33,9 +45,9 @@ This following is one of the included example programs, `listen.rs`. It is a poo
 imitation of `axlisten`.
 
 ```rust
-use ax25::tnc::{Tnc, TncAddress};
-use chrono::prelude::*;
+use ax25_tnc::tnc::{Tnc, TncAddress};
 use std::env;
+use time::OffsetDateTime;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
@@ -50,8 +62,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = args[1].parse::<TncAddress>()?;
     let tnc = Tnc::open(&addr)?;
 
-    while let Ok(frame) = tnc.receive_frame() {
-        println!("{}", Local::now());
+    let receiver = tnc.incoming();
+    while let Ok(frame) = receiver.recv().unwrap() {
+        println!("{}", OffsetDateTime::now_utc());
         println!("{}", frame);
     }
     Ok(())
