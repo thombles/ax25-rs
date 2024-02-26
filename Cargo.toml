@@ -1,2 +1,3 @@
 [workspace]
 members = ["ax25", "ax25_tnc"]
+resolver = "2"
