@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 /// Errors when parsing a callsign-SSID into an `Address`
 #[derive(Debug)]
 pub enum AddressParseError {
+    CallsignTooLong,
     InvalidFormat,
     InvalidSsid { source: core::num::ParseIntError },
     SsidOutOfRange,
@@ -24,6 +25,7 @@ impl std::error::Error for AddressParseError {
 impl fmt::Display for AddressParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::CallsignTooLong => write!(f, "Address can be at most 6 characters long"),
             Self::InvalidFormat => write!(
                 f,
                 "Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"
@@ -356,13 +358,42 @@ impl FrameContent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Address {
     // An alphanumeric ASCII callsign of maximum length 6, e.g. "VK7NTK"
-    pub callsign: String,
+    callsign: String,
     /// Secondary Station Identifier, from 0 to 15
-    pub ssid: u8,
-    c_bit: bool,
+    ssid: u8,
 }
 
 impl Address {
+    /// Construct an `Address` from callsign and SSID, ensuring that both are valid.
+    pub fn from_parts(callsign: String, ssid: u8) -> Result<Self, AddressParseError> {
+        let callsign = callsign.to_uppercase();
+        if callsign.is_empty() {
+            return Err(AddressParseError::InvalidFormat);
+        }
+        if callsign.len() > 6 {
+            return Err(AddressParseError::CallsignTooLong);
+        }
+        for c in callsign.chars() {
+            if !c.is_alphanumeric() {
+                return Err(AddressParseError::InvalidFormat);
+            }
+        }
+        if ssid > 15 {
+            return Err(AddressParseError::SsidOutOfRange);
+        }
+        Ok(Address { callsign, ssid })
+    }
+
+    /// Callsign part of the address, e.g. `VK7NTK`
+    pub fn callsign(&self) -> &str {
+        &self.callsign
+    }
+
+    /// SSID part of the address, e.g. `0`
+    pub fn ssid(&self) -> u8 {
+        self.ssid
+    }
+
     fn to_bytes(&self, high_bit: bool, final_in_address: bool) -> Vec<u8> {
         let mut encoded = Vec::new();
         // Shift by one bit as required for AX.25 address encoding
@@ -388,7 +419,6 @@ impl Default for Address {
         Address {
             callsign: "NOCALL".to_string(),
             ssid: 0,
-            c_bit: false,
         }
     }
 }
@@ -412,29 +442,11 @@ impl FromStr for Address {
             return Err(AddressParseError::InvalidFormat);
         }
 
-        let callsign = parts[0].to_uppercase();
-        if callsign.is_empty() || callsign.len() > 6 {
-            return Err(AddressParseError::InvalidFormat);
-        }
-        for c in callsign.chars() {
-            if !c.is_alphanumeric() {
-                return Err(AddressParseError::InvalidFormat);
-            }
-        }
-
         let ssid = parts[1]
             .parse::<u8>()
             .map_err(|e| AddressParseError::InvalidSsid { source: e })?;
-        if ssid > 15 {
-            return Err(AddressParseError::SsidOutOfRange);
-        }
 
-        // c_bit will be set on transmit
-        Ok(Address {
-            callsign,
-            ssid,
-            c_bit: false,
-        })
+        Self::from_parts(parts[0].to_owned(), ssid)
     }
 }
 
@@ -510,22 +522,22 @@ impl Ax25Frame {
             let repeater =
                 parse_address(&bytes[addr_start + 14 + i * 7..addr_start + 14 + (i + 1) * 7])?;
             let entry = RouteEntry {
-                has_repeated: repeater.c_bit, // The "C" bit in an address happens to be the repeated bit for a repeater
-                repeater,
+                has_repeated: repeater.high_bit,
+                repeater: repeater.address,
             };
             route.push(entry);
         }
 
         let content = parse_content(&bytes[control..])?;
-        let command_or_response = match (dest.c_bit, src.c_bit) {
+        let command_or_response = match (dest.high_bit, src.high_bit) {
             (true, false) => Some(CommandResponse::Command),
             (false, true) => Some(CommandResponse::Response),
             _ => None,
         };
 
         Ok(Ax25Frame {
-            source: src,
-            destination: dest,
+            source: src.address,
+            destination: dest.address,
             route,
             content,
             command_or_response,
@@ -571,7 +583,13 @@ impl fmt::Display for Ax25Frame {
     }
 }
 
-fn parse_address(bytes: &[u8]) -> Result<Address, FrameParseError> {
+struct ParsedAddress {
+    address: Address,
+    /// Indicates repeater consumed or specifying command/response depending on context
+    high_bit: bool,
+}
+
+fn parse_address(bytes: &[u8]) -> Result<ParsedAddress, FrameParseError> {
     let mut dest_utf8: Vec<u8> = bytes[0..6]
         .iter()
         .rev()
@@ -579,11 +597,14 @@ fn parse_address(bytes: &[u8]) -> Result<Address, FrameParseError> {
         .skip_while(|&c| c == b' ')
         .collect::<Vec<u8>>();
     dest_utf8.reverse();
-    Ok(Address {
+    let address = Address {
         callsign: String::from_utf8(dest_utf8)
             .map_err(|e| FrameParseError::AddressInvalidUtf8 { source: e })?,
         ssid: (bytes[6] >> 1) & 0x0f,
-        c_bit: bytes[6] & 0b1000_0000 > 0,
+    };
+    Ok(ParsedAddress {
+        address,
+        high_bit: bytes[6] & 0b1000_0000 > 0,
     })
 }
 
@@ -743,7 +764,6 @@ fn test_address_fromstr() {
         Address {
             callsign: "VK7NTK".to_string(),
             ssid: 1,
-            c_bit: false
         }
     );
     assert_eq!(
@@ -751,7 +771,6 @@ fn test_address_fromstr() {
         Address {
             callsign: "ID".to_string(),
             ssid: 15,
-            c_bit: false
         }
     );
     assert!(Address::from_str("vk7ntk-5").is_ok());
