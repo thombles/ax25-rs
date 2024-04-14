@@ -355,7 +355,7 @@ impl FrameContent {
 }
 
 /// A source or destination of an AX.25 frame, combining a callsign with an SSID.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Address {
     // An alphanumeric ASCII callsign of maximum length 6, e.g. "VK7NTK"
     callsign: String,
@@ -452,7 +452,7 @@ impl FromStr for Address {
 }
 
 /// A single hop in the frame's route
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteEntry {
     /// Callsign-SSID of a repeater to use for source routing.
     pub repeater: Address,
@@ -461,7 +461,7 @@ pub struct RouteEntry {
 }
 
 /// A strongly-typed representation of a single AX.25 frame.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ax25Frame {
     /// Sending station
     pub source: Address,
