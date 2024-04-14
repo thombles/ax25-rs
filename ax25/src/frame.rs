@@ -28,7 +28,7 @@ impl fmt::Display for AddressParseError {
             Self::CallsignTooLong => write!(f, "Address can be at most 6 characters long"),
             Self::InvalidFormat => write!(
                 f,
-                "Address must be a callsign, '-', and a numeric SSID. Example: VK7NTK-0"
+                "Address must be a callsign optionally followed by a `-` and numeric SSID. Example: VK7NTK-5"
             ),
             Self::InvalidSsid { source } => write!(f, "Could not parse SSID: {}", source),
             Self::SsidOutOfRange => write!(f, "SSID must be between 0 and 15 inclusive"),
@@ -438,15 +438,16 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() != 2 {
-            return Err(AddressParseError::InvalidFormat);
+        if parts.len() == 1 {
+            Self::from_parts(parts[0].to_owned(), 0)
+        } else if parts.len() == 2 {
+            let ssid = parts[1]
+                .parse::<u8>()
+                .map_err(|e| AddressParseError::InvalidSsid { source: e })?;
+            Self::from_parts(parts[0].to_owned(), ssid)
+        } else {
+            Err(AddressParseError::InvalidFormat)
         }
-
-        let ssid = parts[1]
-            .parse::<u8>()
-            .map_err(|e| AddressParseError::InvalidSsid { source: e })?;
-
-        Self::from_parts(parts[0].to_owned(), ssid)
     }
 }
 
@@ -759,6 +760,7 @@ fn pid_test() {
 
 #[test]
 fn test_address_fromstr() {
+    // Simple cases
     assert_eq!(
         Address::from_str("VK7NTK-1").unwrap(),
         Address {
@@ -773,13 +775,24 @@ fn test_address_fromstr() {
             ssid: 15,
         }
     );
+
+    // Skipping the SSID is allowed, assumed to be 0
+    let addr_0 = Address::from_str("VK7NTK").unwrap();
+    assert_eq!(addr_0.callsign(), "VK7NTK");
+    assert_eq!(addr_0.ssid(), 0);
+
+    // Works, converted to upper case automatically
     assert!(Address::from_str("vk7ntk-5").is_ok());
 
+    // Valid edge case - `8` will be the callsign part with SSID assumed to be 0
+    assert!(Address::from_str("8").is_ok());
+
+    // SSID on its own fails
     assert!(Address::from_str("-1").is_err());
-    assert!(Address::from_str("VK7NTK").is_err());
+
+    // Various format errors
     assert!(Address::from_str("VK7N -5").is_err());
     assert!(Address::from_str("VK7NTK-16").is_err());
-    assert!(Address::from_str("8").is_err());
     assert!(Address::from_str("vk7n--1").is_err());
 }
 
