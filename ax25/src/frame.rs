@@ -354,12 +354,12 @@ impl FrameContent {
     }
 }
 
-/// A source or destination of an AX.25 frame, combining a callsign with an SSID.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// A source, destination or repeater in an AX.25 frame.
+///
+/// An `Address` is a combination of a callsign and a numeric SSID.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address {
-    // An alphanumeric ASCII callsign of maximum length 6, e.g. "VK7NTK"
     callsign: String,
-    /// Secondary Station Identifier, from 0 to 15
     ssid: u8,
 }
 
@@ -477,19 +477,6 @@ pub struct Ax25Frame {
 }
 
 impl Ax25Frame {
-    /// Returns a UTF-8 string that is a "best effort" at displaying the information
-    /// content of this frame. Returns None if there is no information field present.
-    /// Most applications will need to work with the Vec<u8> info directly.
-    pub fn info_string_lossy(&self) -> Option<String> {
-        match self.content {
-            FrameContent::Information(ref i) => Some(String::from_utf8_lossy(&i.info).into_owned()),
-            FrameContent::UnnumberedInformation(ref ui) => {
-                Some(String::from_utf8_lossy(&ui.info).into_owned())
-            }
-            _ => None,
-        }
-    }
-
     /// Parse raw bytes into an Ax25Frame if possible.
     pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, FrameParseError> {
         // Skip over leading null bytes
@@ -545,6 +532,20 @@ impl Ax25Frame {
         })
     }
 
+    /// Construct a basic UnnumberedInformation (connectionless) frame with chosen data.
+    pub fn new_simple_ui_frame(source: Address, destination: Address, info: Vec<u8>) -> Self {
+        Self {
+            source,
+            destination,
+            content: FrameContent::UnnumberedInformation(UnnumberedInformation {
+                pid: ProtocolIdentifier::None,
+                info,
+                poll_or_final: false,
+            }),
+            ..Default::default()
+        }
+    }
+
     /// Encode an Ax25Frame struct as raw bytes for transmission
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut frame = Vec::new();
@@ -566,6 +567,35 @@ impl Ax25Frame {
 
         frame.extend(self.content.encode());
         frame
+    }
+
+    /// Returns a UTF-8 string that is a "best effort" at displaying the information
+    /// content of this frame. Returns None if there is no information field present.
+    /// Most applications will need to work with the Vec<u8> info directly.
+    pub fn info_string_lossy(&self) -> Option<String> {
+        match self.content {
+            FrameContent::Information(ref i) => Some(String::from_utf8_lossy(&i.info).into_owned()),
+            FrameContent::UnnumberedInformation(ref ui) => {
+                Some(String::from_utf8_lossy(&ui.info).into_owned())
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Default for Ax25Frame {
+    fn default() -> Self {
+        Self {
+            source: Address::default(),
+            destination: Address::default(),
+            route: vec![],
+            command_or_response: Some(CommandResponse::Command),
+            content: FrameContent::UnnumberedInformation(UnnumberedInformation {
+                pid: ProtocolIdentifier::None,
+                info: vec![],
+                poll_or_final: false,
+            }),
+        }
     }
 }
 
