@@ -480,7 +480,7 @@ impl Ax25Frame {
     /// Parse raw bytes into an Ax25Frame if possible.
     pub fn from_bytes(bytes: &[u8]) -> Result<Ax25Frame, FrameParseError> {
         // Skip over leading null bytes
-        // Linux AF_PACKET has oen of these - we will strip it out in the linux module
+        // Linux AF_PACKET has one of these - we will strip it out in the linux module
         // but also keep the protection here
         let addr_start = bytes
             .iter()
