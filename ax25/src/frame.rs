@@ -1,7 +1,8 @@
+use alloc::borrow::ToOwned;
 use alloc::fmt;
 use alloc::str::FromStr;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 /// Errors when parsing a callsign-SSID into an `Address`
 #[derive(Debug)]
