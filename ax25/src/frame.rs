@@ -748,111 +748,31 @@ fn parse_content(bytes: &[u8]) -> Result<FrameContent, FrameParseError> {
         return Err(FrameParseError::ContentZeroLength);
     }
     match bytes[0] {
+        // I-frames have bit 0 clear (even numbers)
         c if c & 0x01 == 0x00 => parse_i_frame(bytes),
-        c if c & 0x03 == 0x01 => parse_s_frame(bytes),
-        c if c & 0x03 == 0x03 => parse_u_frame(bytes),
+
+        // S-frames end with 01 and match specific RR, RNR, REJ lower nibble patterns
+        c if matches!(c & 0x03, 0x01) && matches!(c & 0x0F, 0b0001 | 0b0101 | 0b1001) => {
+            parse_s_frame(bytes)
+        }
+
+        // U-frames end with 11 and match specific SABM, DISC, DM, UA, FRMR, UI patterns
+        c if matches!(c & 0x03, 0x03)
+            && matches!(
+                c & 0xEF,
+                0b0010_1111 | 0b0100_0011 | 0b0000_1111 | 0b0110_0011 | 0b1000_0111 | 0b0000_0011
+            ) =>
+        {
+            parse_u_frame(bytes)
+        }
+
+        // Anything else falls through safely to UnknownContent
         _ => Ok(FrameContent::UnknownContent(UnknownContent {
             raw: bytes.to_vec(),
         })),
     }
 }
 
-#[test]
-fn pid_test() {
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0x01),
-        ProtocolIdentifier::X25Plp
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0xCA),
-        ProtocolIdentifier::Appletalk
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0xFF),
-        ProtocolIdentifier::Escape
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0x45),
-        ProtocolIdentifier::Unknown(0x45)
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0x10),
-        ProtocolIdentifier::Layer3Impl
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0x20),
-        ProtocolIdentifier::Layer3Impl
-    );
-    assert_eq!(
-        ProtocolIdentifier::from_byte(0xA5),
-        ProtocolIdentifier::Layer3Impl
-    );
-}
-
-#[test]
-fn test_address_fromstr() {
-    // Simple cases
-    assert_eq!(
-        Address::from_str("VK7NTK-1").unwrap(),
-        Address {
-            callsign: "VK7NTK".to_string(),
-            ssid: 1,
-        }
-    );
-    assert_eq!(
-        Address::from_str("ID-15").unwrap(),
-        Address {
-            callsign: "ID".to_string(),
-            ssid: 15,
-        }
-    );
-
-    // Skipping the SSID is allowed, assumed to be 0
-    let addr_0 = Address::from_str("VK7NTK").unwrap();
-    assert_eq!(addr_0.callsign(), "VK7NTK");
-    assert_eq!(addr_0.ssid(), 0);
-
-    // Works, converted to upper case automatically
-    assert!(Address::from_str("vk7ntk-5").is_ok());
-
-    // Valid edge case - `8` will be the callsign part with SSID assumed to be 0
-    assert!(Address::from_str("8").is_ok());
-
-    // SSID on its own fails
-    assert!(Address::from_str("-1").is_err());
-
-    // Various format errors
-    assert!(Address::from_str("VK7N -5").is_err());
-    assert!(Address::from_str("VK7NTK-16").is_err());
-    assert!(Address::from_str("vk7n--1").is_err());
-}
-
-#[test]
-fn test_round_trips() {
-    use std::fs::{read_dir, File};
-    use std::io::Read;
-
-    let mut paths: Vec<_> = read_dir("testdata/linux-ax0")
-        .unwrap()
-        .map(|r| r.unwrap())
-        .collect();
-    paths.sort_by_key(|dir| dir.path());
-    for entry in paths {
-        let entry_path = entry.path();
-        println!("Testing round trip on {}", entry_path.display());
-        let filename = entry_path.to_str().unwrap();
-        let mut file = File::open(filename).unwrap();
-        let mut frame_data: Vec<u8> = Vec::new();
-        let _ = file.read_to_end(&mut frame_data);
-        // Skip the leading null byte. A quirk as they came from Linux AF_PACKET.
-        let frame_data_fixed = &frame_data[1..];
-
-        match Ax25Frame::from_bytes(frame_data_fixed) {
-            Ok(parsed) => {
-                // Should be identical when re-encoded
-                assert_eq!(frame_data_fixed, &parsed.to_bytes()[..])
-            }
-            Err(e) => panic!("Could not parse! {}", e),
-        };
-    }
-}
+#[cfg(test)]
+#[path = "frame_tests.rs"]
+mod frame_tests;

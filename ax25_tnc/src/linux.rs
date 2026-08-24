@@ -284,3 +284,7 @@ mod sys {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "linux_tests.rs"]
+mod linux_tests;

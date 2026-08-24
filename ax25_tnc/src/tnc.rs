@@ -306,10 +306,12 @@ impl TncInner {
                         Err(e) => Err(Arc::new(e)),
                     };
 
-                    senders.lock().unwrap().retain(|s| {
-                        // If there's an error, remove sender from vec
+                    let mut senders_lock = senders.lock().unwrap();
+                    senders_lock.retain(|s| {
+                        // If there's an error or closed receiver, remove sender from vec
                         s.send(x.clone()).is_ok()
                     });
+
                     if x.is_err() {
                         break;
                     }
@@ -493,110 +495,5 @@ impl TncImpl for SerialKissTnc {
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn parse_tnc_addresses() {
-        assert_eq!(
-            "tnc:tcpkiss:192.168.0.1:8001".parse::<TncAddress>(),
-            Ok(TncAddress {
-                config: ConnectConfig::TcpKiss(TcpKissConfig {
-                    host: "192.168.0.1".to_string(),
-                    port: 8001_u16,
-                })
-            })
-        );
-        assert_eq!(
-            "tnc:linuxif:VK7NTK-2".parse::<TncAddress>(),
-            Ok(TncAddress {
-                config: ConnectConfig::LinuxIf(LinuxIfConfig {
-                    callsign: "VK7NTK-2".to_string(),
-                })
-            })
-        );
-        assert_eq!(
-            "tnc:serialkiss:/dev/ttyUSB0:9200".parse::<TncAddress>(),
-            Ok(TncAddress {
-                config: ConnectConfig::SerialKiss(SerialKissConfig {
-                    device: "/dev/ttyUSB0".to_string(),
-                    baud: 9200
-                })
-            })
-        );
-        assert!(matches!(
-            "fish".parse::<TncAddress>(),
-            Err(ParseError::NoTncPrefix { .. })
-        ));
-        assert!(matches!("tnc:".parse::<TncAddress>(),
-            Err(ParseError::UnknownType { tnc_type }) if tnc_type.is_empty()));
-        assert!(matches!("tnc:fish".parse::<TncAddress>(),
-            Err(ParseError::UnknownType { tnc_type }) if tnc_type == "fish"));
-        assert!(match "tnc:tcpkiss".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "tcpkiss" && expected == 2 && actual == 0
-            }
-            _ => false,
-        });
-        assert!(match "tnc:tcpkiss:".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "tcpkiss" && expected == 2 && actual == 1
-            }
-            _ => false,
-        });
-        assert!(match "tnc:tcpkiss:a:b:c".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "tcpkiss" && expected == 2 && actual == 3
-            }
-            _ => false,
-        });
-        assert!(match "tnc:tcpkiss:192.168.0.1".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "tcpkiss" && expected == 2 && actual == 1
-            }
-            _ => false,
-        });
-        assert!(
-            match "tnc:tcpkiss:192.168.0.1:hello".parse::<TncAddress>() {
-                Err(ParseError::InvalidPort { input, .. }) => input == "hello",
-                _ => false,
-            }
-        );
-        assert!(match "tnc:serialkiss:".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "serialkiss" && expected == 2 && actual == 1
-            }
-            _ => false,
-        });
-        assert!(match "tnc:serialkiss:a:b:c".parse::<TncAddress>() {
-            Err(ParseError::WrongParameterCount {
-                tnc_type,
-                expected,
-                actual,
-            }) => {
-                tnc_type == "serialkiss" && expected == 2 && actual == 3
-            }
-            _ => false,
-        });
-    }
-}
+#[path = "tnc_tests.rs"]
+mod tnc_tests;

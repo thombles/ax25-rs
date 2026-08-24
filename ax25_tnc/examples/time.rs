@@ -32,11 +32,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Receive on the initial thread
     let receiver = tnc.incoming();
-    while let Ok(frame) = receiver.recv().unwrap() {
-        // If someone asks us what the time is, tell them immediately
-        if let Some(text) = frame.info_string_lossy() {
-            if text.contains("what is the time?") {
-                transmit_time(&tnc, &src, &frame.source)?;
+    // Safely handle channel results instead of unwrapping the outer result
+    while let Ok(frame_result) = receiver.recv() {
+        match frame_result {
+            Ok(frame) => {
+                // If someone asks us what the time is, tell them immediately
+                if let Some(text) = frame.info_string_lossy() {
+                    if text.contains("what is the time?") {
+                        let _ = transmit_time(&tnc, &src, &frame.source);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Error receiving frame: {}", e);
+                break;
             }
         }
     }

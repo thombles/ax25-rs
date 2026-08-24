@@ -43,6 +43,12 @@ impl TcpKissInterface {
 
     pub(crate) fn receive_frame(&self) -> io::Result<Vec<u8>> {
         loop {
+            if self.is_shutdown.load(Ordering::SeqCst) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "TNC shutting down",
+                ));
+            }
             {
                 let mut buffer = self.buffer.lock().unwrap();
                 if let Some(frame) = make_frame_from_buffer(&mut buffer) {
@@ -54,14 +60,30 @@ impl TcpKissInterface {
                 let mut rx_stream = self.rx_stream.lock().unwrap();
                 rx_stream.read(&mut buf)?
             };
+            if n_bytes == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "Connection closed",
+                ));
+            }
             {
                 let mut buffer = self.buffer.lock().unwrap();
+                // Prevent unbounded buffer growth if garbage bytes accumulate without a frame
+                if buffer.len() > 65536 {
+                    buffer.clear();
+                }
                 buffer.extend(buf.iter().take(n_bytes));
             }
         }
     }
 
     pub(crate) fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
+        if self.is_shutdown.load(Ordering::SeqCst) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "TNC is shut down",
+            ));
+        }
         let mut tx_stream = self.tx_stream.lock().unwrap();
         // 0x00 is the KISS command byte, which is two nybbles
         // port = 0
@@ -76,8 +98,9 @@ impl TcpKissInterface {
     pub(crate) fn shutdown(&self) {
         if !self.is_shutdown.load(Ordering::SeqCst) {
             self.is_shutdown.store(true, Ordering::SeqCst);
-            let tx_stream = self.tx_stream.lock().unwrap();
-            let _ = tx_stream.shutdown(Shutdown::Both);
+            if let Ok(tx_stream) = self.tx_stream.lock() {
+                let _ = tx_stream.shutdown(Shutdown::Both);
+            }
         }
     }
 }
@@ -130,6 +153,12 @@ impl SerialKissInterface {
         #[cfg(feature = "serial")]
         {
             loop {
+                if self.is_shutdown.load(Ordering::SeqCst) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "TNC shutting down",
+                    ));
+                }
                 {
                     let mut buffer = self.buffer.lock().unwrap();
                     if let Some(frame) = make_frame_from_buffer(&mut buffer) {
@@ -143,6 +172,9 @@ impl SerialKissInterface {
                 };
                 {
                     let mut buffer = self.buffer.lock().unwrap();
+                    if buffer.len() > 65536 {
+                        buffer.clear();
+                    }
                     buffer.extend(buf.iter().take(n_bytes));
                 }
             }
@@ -161,6 +193,12 @@ impl SerialKissInterface {
     pub(crate) fn send_frame(&self, frame: &[u8]) -> io::Result<()> {
         #[cfg(feature = "serial")]
         {
+            if self.is_shutdown.load(Ordering::SeqCst) {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "TNC is shut down",
+                ));
+            }
             let mut tx_stream = self.tx_stream.lock().unwrap();
             // 0x00 is the KISS command byte, which is two nybbles
             // port = 0
@@ -243,79 +281,21 @@ fn make_frame_from_buffer(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
     }
 
     match final_idx {
-        0 => None,
+        0 => {
+            // Clear out old leading junk if the buffer is getting too full and no frame starts
+            if buffer.len() > 65536 {
+                buffer.clear();
+            }
+            None
+        }
         n => {
-            // Draining up to "n" will leave the final FEND in place
-            // This way we can use it as the start marker for the next frame
+            // Drain everything up to 'n', leaving the FEND at index 'n' in the buffer
             buffer.drain(0..n);
             Some(possible_frame)
         }
     }
 }
 
-#[test]
-fn test_normal_frame() {
-    let mut rx = vec![FEND, 0x01, 0x02, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_trailing_data() {
-    let mut rx = vec![FEND, 0x01, 0x02, FEND, 0x03, 0x04];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(rx, vec![FEND, 0x03, 0x04]);
-}
-
-#[test]
-fn test_leading_data() {
-    let mut rx = vec![0x03, 0x04, FEND, 0x01, 0x02, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_consecutive_marker() {
-    let mut rx = vec![FEND, FEND, FEND, 0x01, 0x02, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_escapes() {
-    let mut rx = vec![FEND, 0x01, FESC, TFESC, 0x02, FESC, TFEND, 0x03, FEND];
-    assert_eq!(
-        make_frame_from_buffer(&mut rx),
-        Some(vec![0x01, FESC, 0x02, FEND, 0x03])
-    );
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_incorrect_escape_skipped() {
-    let mut rx = vec![
-        FEND, 0x01, FESC, 0x04, TFESC, /* passes normally without leading FESC */
-        0x02, FEND,
-    ];
-    assert_eq!(
-        make_frame_from_buffer(&mut rx),
-        Some(vec![0x01, TFESC, 0x02])
-    );
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_two_frames_single_fend() {
-    let mut rx = vec![FEND, 0x01, 0x02, FEND, 0x03, 0x04, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x03, 0x04]));
-    assert_eq!(rx, vec![FEND]);
-}
-
-#[test]
-fn test_two_frames_double_fend() {
-    let mut rx = vec![FEND, 0x01, 0x02, FEND, FEND, 0x03, 0x04, FEND];
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x01, 0x02]));
-    assert_eq!(make_frame_from_buffer(&mut rx), Some(vec![0x03, 0x04]));
-    assert_eq!(rx, vec![FEND]);
-}
+#[cfg(test)]
+#[path = "kiss_tests.rs"]
+mod kiss_tests;

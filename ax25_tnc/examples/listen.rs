@@ -17,9 +17,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tnc = Tnc::open(&addr)?;
 
     let receiver = tnc.incoming();
-    while let Ok(frame) = receiver.recv().unwrap() {
-        println!("{}", OffsetDateTime::now_utc());
-        println!("{}", frame);
+    // Safely handle channel results instead of unwrapping the outer result
+    while let Ok(frame_result) = receiver.recv() {
+        match frame_result {
+            Ok(frame) => {
+                println!("{}", OffsetDateTime::now_utc());
+                println!("{}", frame);
+            }
+            Err(e) => {
+                eprintln!("Error receiving frame: {}", e);
+                break;
+            }
+        }
     }
     Ok(())
 }

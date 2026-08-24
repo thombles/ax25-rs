@@ -26,13 +26,25 @@ The crate `ax25_tnc` provides:
 * KISS protocol
 * Connect to TNCs via multiple methods without needing to change your code
 
+## Prerequisites
+
+If you plan to use serial-based TNC connections (enabling the `serial` feature on `ax25_tnc`), your system needs the appropriate development libraries for hardware access.
+
+On Debian/Ubuntu-based Linux distributions, make sure you have `libudev-dev` installed:
+
+```bash
+sudo apt update
+sudo apt install libudev-dev
+```
+
 ## Quick Start
 
 Most developers will want to focus on `tnc::TncAddress` and `tnc::Tnc`.
-1. Generate or ask the user to supply an address string. This takes the form:  
-   `tnc:tcpkiss:192.168.0.1:8001` or  
-   `tnc:linuxif:vk7ntk-2` or  
-    `tnc:serialkiss:/dev/ttyUSB0:9600` (must enable `serial` feature on `ax25_tnc`)
+
+1. Generate or ask the user to supply an address string. This takes the form:
+`tnc:tcpkiss:192.168.0.1:8001` or
+`tnc:linuxif:vk7ntk-2` or
+`tnc:serialkiss:/dev/ttyUSB0:9600` (must enable `serial` feature on `ax25_tnc`)
 2. Parse this to an address: `let addr = string.parse::<TncAddress>()?;`
 3. Attempt to open the TNC: `let tnc = Tnc::open(&addr)?;`
 4. Use `send_frame()` and `incoming()` to communicate on the radio.
@@ -79,9 +91,9 @@ using the Linux interface.
 ```
 $ sudo ./target/debug/examples/listen tnc:linuxif:vk7ntk-2
 2020-02-02 21:51:11.017220715 +11:00
-Source		VK7NTK-1
-Destination	IDENT
-Data		"hello this is a test"
+Source      VK7NTK-1
+Destination IDENT
+Data        "hello this is a test"
 ```
 
 The above is the `Display` implementation for `Ax25Frame` - full protocol information
